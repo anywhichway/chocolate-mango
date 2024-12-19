@@ -1,10 +1,21 @@
-(() => {
+
     const VALID_MANGO_OPERATORS = new Set([
         '$lt', '$lte', '$eq', '$ne', '$gte', '$gt',
         '$exists', '$type', '$in', '$nin', '$size',
         '$mod', '$regex', '$or', '$and', '$nor', '$not',
         '$all', '$elemMatch'
     ]);
+
+    function argLength(func) {
+        const funcStr = func.toString();
+        const argMatch = funcStr.match(/\(([^)]*)\)/);
+        if (!argMatch) {
+            // Handle shorthand functions without parentheses
+            return funcStr.match(/=>/g) ? 1 : 0;
+        }
+        const args = argMatch[1].split(',').filter(arg => arg.trim() !== '');
+        return args.length;
+    }
 
     function normalizeMangoQuery(obj, parentPath = '', result = {}) {
         // Special handling for logical operators
@@ -34,7 +45,14 @@
                     );
 
                     if (validOperators) {
-                        result[currentPath] = value;
+                        // Store the entire match context, not just the value
+                        const parts = currentPath.split('.');
+                        let current = result;
+                        for (let i = 0; i < parts.length - 1; i++) {
+                            current[parts[i]] = current[parts[i]] || {};
+                            current = current[parts[i]];
+                        }
+                        current[parts[parts.length - 1]] = value;
                     }
                 } else {
                     normalizeMangoQuery(value, currentPath, result);
@@ -69,172 +87,504 @@
         return { [operator]: normalizedClauses };
     }
 
+    // Soundex implementation function
+    function soundex(str) {
+        // Convert string to uppercase
+        str = str.toUpperCase();
+
+        // Keep first letter
+        let result = str[0];
+
+        // Soundex coding rules
+        const codes = {
+            'BFPV': '1',
+            'CGJKQSXZ': '2',
+            'DT': '3',
+            'L': '4',
+            'MN': '5',
+            'R': '6',
+            'AEIOUHWY': '0'
+        };
+
+        // Previous code (initialize as null)
+        let prevCode = null;
+
+        // Process remaining characters
+        for (let i = 1; i < str.length; i++) {
+            let currentCode = '0';
+
+            // Find the code for current character
+            for (let key in codes) {
+                if (key.includes(str[i])) {
+                    currentCode = codes[key];
+                    break;
+                }
+            }
+
+            // Only add code if it's different from previous code
+            if (currentCode !== '0' && currentCode !== prevCode) {
+                result += currentCode;
+            }
+
+            // Update previous code
+            prevCode = currentCode;
+        }
+
+        // Pad with zeros if necessary
+        result = result.padEnd(4, '0');
+
+        // Return first 4 characters
+        return result.slice(0, 4);
+    }
+
+    // Helper functions
+    function isPrime(num) {
+        if (num <= 1) return false;
+        if (num <= 3) return true;
+        if (num % 2 === 0 || num % 3 === 0) return false;
+        for (let i = 5; i * i <= num; i += 6) {
+            if (num % i === 0 || num % (i + 2) === 0) return false;
+        }
+        return true;
+    }
+
+    // Helper function to normalize values to comparable format
+    function normalizeValue(value) {
+        if (value instanceof Date) return value.getTime();
+        if (typeof value === 'string') {
+            const timestamp = Date.parse(value);
+            return isNaN(timestamp) ? value : timestamp;
+        }
+        return value;
+    }
+
+    // Date formatting tokens
+    const dateTokens = {
+        // Date
+        YYYY: d => d.getFullYear(),
+        YY: d => String(d.getFullYear()).slice(-2),
+        MM: d => String(d.getMonth() + 1).padStart(2, '0'),
+        M: d => d.getMonth() + 1,
+        DD: d => String(d.getDate()).padStart(2, '0'),
+        D: d => d.getDate(),
+
+        // Day of week
+        dddd: d => ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][d.getDay()],
+        ddd: d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()],
+        d: d => d.getDay(),
+
+        // Month names
+        MMMM: d => ['January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'][d.getMonth()],
+        MMM: d => ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+            'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()],
+
+        // Time
+        HH: d => String(d.getHours()).padStart(2, '0'),
+        H: d => d.getHours(),
+        hh: d => String(d.getHours() % 12 || 12).padStart(2, '0'),
+        h: d => d.getHours() % 12 || 12,
+        mm: d => String(d.getMinutes()).padStart(2, '0'),
+        m: d => d.getMinutes(),
+        ss: d => String(d.getSeconds()).padStart(2, '0'),
+        s: d => d.getSeconds(),
+        SSS: d => String(d.getMilliseconds()).padStart(3, '0'),
+        a: d => d.getHours() < 12 ? 'am' : 'pm',
+        A: d => d.getHours() < 12 ? 'AM' : 'PM'
+    }
+
+
     const predicates = {
+        // Array Predicates
+        $all(a, array) { return Array.isArray(a) && array.every(value => a.includes(value)) ? a : undefined },
+        $disjoint(a, b) { return Array.isArray(a) && Array.isArray(b) && !a.some(value => b.includes(value)) ? a : undefined },
+        $elemMatch(a, pattern, options) { return Array.isArray(a) && a.some(value => query(pattern, value, options)) ? a : undefined },
+        $excludes(a, b) { return Array.isArray(a) && Array.isArray(b) && !b.some(value => a.includes(value)) ? a : undefined },
+        $includes(a, b) { return Array.isArray(a) && Array.isArray(b) && b.every(value => a.includes(value)) ? a : undefined },
+        $intersects(a, b) { return Array.isArray(a) && Array.isArray(b) && a.some(value => b.includes(value)) ? a : undefined },
+        $length(a, b) { return (Array.isArray(a) || typeof a === 'string') && a.length === b ? a : undefined },
+        $size(a, b) { return Array.isArray(a) && a.length === b ? a : undefined },
+        $subset(a, b) { return Array.isArray(a) && Array.isArray(b) && a.every(value => b.includes(value)) ? a : undefined },
+        $superset(a, b) { return Array.isArray(a) && Array.isArray(b) && b.every(value => a.includes(value)) ? a : undefined },
+
+        // Comparison Predicates
+        $eq(a, b) { return a === b ? a : undefined },
+        $gt(a, b) { return a > b ? a : undefined },
+        $gte(a, b) { return a >= b ? a : undefined },
+        $in(a, b) { return b.includes(a) ? a : undefined },
         $lt(a, b) { return a < b ? a : undefined },
         $lte(a, b) { return a <= b ? a : undefined },
-        $eq(a, b) { return a === b ? a : undefined },
         $ne(a, b) { return a !== b ? a : undefined },
-        $gte(a, b) { return a >= b ? a : undefined },
-        $gt(a, b) { return a > b ? a : undefined },
-        $exists(a, b) { return a != null ? a : undefined },
-        $type(a, b) { return typeof a === b ? a : undefined },
-        $in(a, b) { return b.includes(a) ? a : undefined },
         $nin(a, b) { return !b.includes(a) ? a : undefined },
-        $size(a, b) { return Array.isArray(a) && a.length === b ? a : undefined },
-        $mod(a, [b, c]) { return a % b === c ? a : undefined },
-        $regex(a, b) { return b.test(a) ? a : undefined },
-        $or(a, array,options) { return array.some(pattern => query(pattern, a,options)) ? a : undefined },
-        $and(a, array,options) { return array.every(pattern => query(pattern, a,options)) ? a : undefined },
-        $nor(a, array,options) { return !array.some(pattern => query(pattern, a,options)) ? a : undefined },
-        $not(a, pattern,options) { return !query(pattern, a,options) ? a : undefined },
-        $all(a, array) { return Array.isArray(a) && array.every(value => a.includes(value)) ? a : undefined },
-        $elemMatch(a, pattern,options) { return Array.isArray(a) && a.some(value => query(pattern, value,options)) ? a : undefined },
 
-        $intersects(a, b) {
-            return Array.isArray(a) && Array.isArray(b) && a.some(value => b.includes(value)) ? a : undefined
+        // Logic Predicates
+        $and(a, array, options) { return array.every(pattern => query(pattern, a, options)) ? a : undefined },
+        $nor(a, array, options) { return !array.some(pattern => query(pattern, a, options)) ? a : undefined },
+        $not(a, pattern, options) { return !query(pattern, a, options) ? a : undefined },
+        $or(a, array, options) { return array.some(pattern => query(pattern, a, options)) ? a : undefined },
+
+        // Number Predicates
+        $inRange(a, [min, max, inclusive=true]) {
+            return inclusive ?
+                (a >= min && a <= max ? a : undefined) :
+                (a > min && a < max ? a : undefined)
         },
-        $disjoint(a, b) {
-            return Array.isArray(a) && Array.isArray(b) && !a.some(value => b.includes(value)) ? a : undefined
-        },
-        $subset(a, b) {
-            return Array.isArray(a) && Array.isArray(b) && a.every(value => b.includes(value)) ? a : undefined
-        },
-        $superset(a, b) {
-            return Array.isArray(a) && Array.isArray(b) && b.every(value => a.includes(value)) ? a : undefined
-        },
-        $excludes(a, b) {
-            return Array.isArray(a) && Array.isArray(b) && !b.some(value => a.includes(value)) ? a : undefined
-        },
-        $includes(a, b) {
-            return Array.isArray(a) && Array.isArray(b) && b.every(value => a.includes(value)) ? a : undefined
-        },
+        $isEven(a) { return a % 2 === 0 ? a : undefined },
+        $isFloat(a) { return Number.isFinite(a) && !Number.isInteger(a) ? a : undefined },
+        $isInteger(a) { return Number.isInteger(a) ? a : undefined },
+        $isNaN(a) { return Number.isNaN(a) ? a : undefined },
+        $isOdd(a) { return a % 2 === 1 ? a : undefined },
+        $isPrime(a) { return Number.isInteger(a) && isPrime(a) ? a : undefined },
+        $mod(a, [b, c]) { return a % b === c ? a : undefined },
+
+        // String Predicates
+        $contains(a, b) { return typeof a === 'string' && a.includes(b) ? a : undefined },
+        $echoes(a, b) { return soundex(String(a)) === soundex(String(b)) ? a : undefined },
+        $endsWith(a, b) { return typeof a === 'string' && a.endsWith(b) ? a : undefined },
+        $isAlpha(a) { return /^[a-zA-Z]*$/.test(a) ? a : undefined },
+        $isAlphaNum(a) { return /^[a-zA-Z0-9]*$/.test(a) ? a : undefined },
+        $isBase64(a) { return /^[a-zA-Z0-9+/]*={0,2}$/.test(a) ? a : undefined },
+        $isEmail(a) { return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(a) ? a : undefined },
+        $isHex(a) { return /^[0-9a-fA-F]*$/.test(a) ? a : undefined },
+        $isIP4(a) { return /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(a) ? a : undefined },
+        $isIP6(a) { return /^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/.test(a) ? a : undefined },
+        $isNumeric(a) { return /^\d+$/.test(a) ? a : undefined },
+        $isSSN(a) { return /^\d{3}-\d{2}-\d{4}$/.test(a) ? a : undefined },
+        $isUSTel(a) { return /^\d{3}-\d{3}-\d{4}$/.test(a) ? a : undefined },
+        $isURL(a) { return /^(https?|ftp):\/\/[^\s/$.?#].[^\s]*$/.test(a) ? a : undefined },
+        $isUUID(a) { return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(a) ? a : undefined },
+        $regex(a, b) { return b.test(a) ? a : undefined },
+        $startsWith(a, b) { return typeof a === 'string' && a.startsWith(b) ? a : undefined },
+
+
+        // Type Predicates
+        $exists(a, b) { return a != null ? a : undefined },
         $instanceof(a, b) {
-            return a && typeof a === "object" && a instanceof b ? a : undefined
+            if(!a || !b) return;
+            const atype = typeof a,
+                btype = typeof b;
+            if(atype === "object" && btype === "object" && a instanceof b) return a;
+            if(atype === "object" && btype === "string" && b === a.constructor.name) return a;
         },
-        $kindof(a, b) {
-            return a != null && a.constructor.name === b ? a : undefined
-        },
-        $isOdd(a) {
-            return a % 2 === 1 ? a : undefined
-        },
-        $isEven(a) {
-            return a % 2 === 0 ? a : undefined
-        },
-        $isUSTel(a) {
-            return /^\d{3}-\d{3}-\d{4}$/.test(a) ? a : undefined
-        },
-        $isIP4(a) {
-            return /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(a) ? a : undefined
-        },
-        $isIP6(a) {
-            return /^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/.test(a) ? a : undefined
-        },
-        $isEmail(a) {
-            return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(a) ? a : undefined
-        },
-        $isSSN(a) {
-            return /^\d{3}-\d{2}-\d{4}$/.test(a) ? a : undefined
-        },
-        $isURL(a) {
-            return /^(https?|ftp):\/\/[^\s/$.?#].[^\s]*$/.test(a) ? a : undefined
-        },
-        $isUUID(a) {
-            return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(a) ? a : undefined
-        },
-        $isDate(a) {
-            return !isNaN(Date.parse(a)) ? a : undefined
-        },
-        $isTime(a) {
-            return /^\d{1,2}:\d{2}(:\d{2})?$/.test(a) ? a : undefined
-        },
+        $isDate(a) { return !isNaN(Date.parse(a)) ? a : undefined },
         $isJSON(a) {
-            try {
-                JSON.parse(a);
-                return a;
-            } catch (e) {
-                return undefined
+            try { JSON.parse(a); return a; }
+            catch(e) { return undefined; }
+        },
+        $isTime(a) { return /^\d{1,2}:\d{2}(:\d{2})?$/.test(a) ? a : undefined },
+        $kindof(a, b) {
+            if(!a || !b) return;
+            const atype = typeof a,
+                btype = typeof b;
+            if(atype === "object" && btype === "object" && a instanceof b) return a;
+            if(atype === "object" && btype === "string" && b === a.constructor.name) return a;
+            if(atype === btype) return a;
+        },
+        $typeof(a, b) { return typeof a === b ? a : undefined },
+
+        // Utility Predicates
+        $isAfter(a, b) {
+            if (a == null || b == null) return undefined;
+            const normalizedA = normalizeValue(a);
+            const normalizedB = normalizeValue(b);
+            return normalizedA > normalizedB ? a : undefined;
+        },
+
+        $isBefore(a, b) {
+            if (a == null || b == null) return undefined;
+            const normalizedA = normalizeValue(a);
+            const normalizedB = normalizeValue(b);
+            return normalizedA < normalizedB ? a : undefined;
+        },
+
+        $isBetween(a, [start, end, inclusive=false]) {
+            if (a == null || start == null || end == null) return undefined;
+            const normalizedA = normalizeValue(a);
+            const normalizedStart = normalizeValue(start);
+            const normalizedEnd = normalizeValue(end);
+
+            return inclusive ?
+                (normalizedA >= normalizedStart && normalizedA <= normalizedEnd ? a : undefined) :
+                (normalizedA > normalizedStart && normalizedA < normalizedEnd ? a : undefined);
+        },
+        $test(a, b) { return b(a) ? a : undefined },
+    };
+
+
+    const transforms = {
+        // Utility Transforms
+        $call(a, {as, f}) { return f(a) },
+        $classname(a, {as}) { return a.constructor.name },
+        $default(a, {as, value}) { return a==null ? value : a },
+        $define(a, {as, enumerable, writable, configurable, value}) {
+            value ||= a;
+            return (o,key) => {
+                Object.defineProperty(o,key,{enumerable,writable,configurable,value});
+                return value;
             }
         },
-        $isBase64(a) {
-            return /^[a-zA-Z0-9+/]*={0,2}$/.test(a) ? a : undefined
-        },
-        $isHex(a) {
-            return /^[0-9a-fA-F]*$/.test(a) ? a : undefined
-        },
-        $isAlpha(a) {
-            return /^[a-zA-Z]*$/.test(a) ? a : undefined
-        },
-        $isAlphaNum(a) {
-            return /^[a-zA-Z0-9]*$/.test(a) ? a : undefined
-        },
-        $test(a, b) {
-            return b.test(a) ? a : undefined
-        }
-    }
-    
-    const tranforms = {
-        $call(a, {f}) { return f(a) },
-        $mod(a, [b, c]) { return a % b === c? a : undefined },
-        $default(a, {value}) { return a==null ? value : a },
-        $define(a, {enumerable,writable,configurable,value}) { value||=a; return (o,key) => { Object.defineProperty(o,key,{enumerable,writable,configurable,value}); return value; } },
-        // all array functions in alphabetical order
-        $average(a, {value,array=[]}) {
+        $entries(a, {as}) { return Object.entries(a) },
+        $eval(a, {as}) { return eval(a) },
+        $keys(a, {as}) { return Object.keys(a) },
+        $parse(a, {as, reviver}) { return JSON.parse(a, reviver) },
+        $stringify(a, {as, replacer, space}) { return JSON.stringify(a, replacer, space) },
+        $type(a, {as}) { return typeof a },
+        $values(a, {as}) { return Object.values(a) },
+
+        // Array Transforms
+        $average(a, {as, value, array=[]}) {
             const items = [a,...array];
             if(!isNaN(value)) items.push(value);
-            return itmem.reduce((sum,value,i,array) => sum + value/array.length,0)
+            return items.reduce((sum,value,i,array) => sum + value/array.length, 0);
         },
-        $difference(a, {array}) { return Array.isArray(a) && Array.isArray(array) ? a.filter(item => !array.includes(item)) : undefined },
-        $dot(a, {value=0,array=[]}) { return [a,value,...array].reduce((dot,value) => dot + value * value,0) },
-        $intersection(a, {array}) { return Array.isArray(a) && Array.isArray(array) ? a.filter(item => array.includes(item)) : undefined },
-        $join(a, {array,separator}) { return Array.isArray(a) && Array.isArray(array) ? [...a,...array].join(separator) : undefined },
-        $pop(a) { return Array.isArray(a) ? a.pop() : undefined },
-        $product(a, {value=1,array=[]}) { return a.flatMap(x => [value,...array].map(y => x * y)) },
-        $push(a, {array}) { return Array.isArray(a) && Array.isArray(array) ? [...a,...array] : undefined },
-        $setDifference(a, {array}) { return Array.isArray(a) && Array.isArray(array) ? a.filter(item => !array.includes(array)) : undefined },
-        $shift(a) { return Array.isArray(a) ? a.shift() : undefined },
-        $slice(a, {start=0,end}) { return Array.isArray(a) ? a.slice(start,end) : undefined },
-        $sort(a, {compare}) { return Array.isArray(a) ? a.sort(compare) : undefined },
-        $splice(a, {start,deleteCount,items=[]}) { return Array.isArray(a) ? a.splice(start,deleteCount,...items) : undefined },
-        $sum(a, {value=0,array=[]}) { return [a,value,...array].reduce((sum,value) => sum + value,0) },
-        $unshift(a, {array}) { return Array.isArray(a) && Array.isArray(array) ? [...array,...a] : undefined },
-        $union(a, {array}) { return Array.isArray(a) && Array.isArray(b) ? [...new Set([...a, ...b])] : undefined },
+        $chunk(a, {as, size=1}) {
+            return Array.isArray(a) ?
+                Array.from({ length: Math.ceil(a.length / size) },
+                    (_, i) => a.slice(i * size, i * size + size)) :
+                undefined;
+        },
+        $compact(a, {as}) {
+            return Array.isArray(a) ? a.filter(x => x != null) : undefined;
+        },
+        $difference(a, {as, array}) {
+            return Array.isArray(a) && Array.isArray(array) ?
+                a.filter(item => !array.includes(item)) : undefined;
+        },
+        $dot(a, {as, value=0, array=[]}) {
+            return [a,value,...array].reduce((dot,value) => dot + value * value, 0);
+        },
+        $flatten(a, {as, depth}) {
+            return Array.isArray(a) ? (typeof depth==="number" ? a.flat(depth) : a.flat()) : undefined;
+        },
+        $groupBy(a, {as, key}) {
+            if (!Array.isArray(a)) return undefined;
+            return a.reduce((groups, item) => {
+                const group = typeof key === 'function' ? key(item) : item[key];
+                (groups[group] = groups[group] || []).push(item);
+                return groups;
+            }, {});
+        },
+        $intersection(a, {as, array}) {
+            return Array.isArray(a) && Array.isArray(array) ?
+                a.filter(item => array.includes(item)) : undefined;
+        },
+        $pop(a, {as}) {
+            return Array.isArray(a) ? a.pop() : undefined;
+        },
+        $product(a, {as, value=1, array=[]}) {
+            return Array.isArray(a) ?
+                a.flatMap(x => [value,...array].map(y => x * y)) :
+                undefined;
+        },
+        $push(a, {as, array}) {
+            return Array.isArray(a) && Array.isArray(array) ?
+                [...a,...array] : undefined;
+        },
+        $setDifference(a, {as, array}) {
+            return Array.isArray(a) && Array.isArray(array) ?
+                a.filter(item => !array.includes(array)) : undefined;
+        },
+        $shift(a, {as}) {
+            return Array.isArray(a) ? a.shift() : undefined;
+        },
+        $slice(a, {as, start=0, end}) {
+            return Array.isArray(a) ? a.slice(start,end) : undefined;
+        },
+        $sort(a, {as, compare}) {
+            return Array.isArray(a) ? a.sort(compare) : undefined;
+        },
+        $splice(a, {as, start, deleteCount, items=[]}) {
+            return Array.isArray(a) ? a.splice(start,deleteCount,...items) : undefined;
+        },
+        $sum(a, {as, value=0, array=[]}) {
+            return [a,value,...array].reduce((sum,value) => sum + value, 0);
+        },
+        $union(a, {as, array}) {
+            return Array.isArray(a) && Array.isArray(b) ?
+                [...new Set([...a, ...array])] : undefined;
+        },
+        $unique(a, {as}) {
+            return Array.isArray(a) ? [...new Set(a)] : undefined;
+        },
+        $unshift(a, {as, array}) {
+            return Array.isArray(a) && Array.isArray(array) ?
+                [...array,...a] : undefined;
+        },
 
-        // All Math.* functions in alphabetical order
-        $abs(a) { return Math.abs(a) },
-        $acos(a) { return Math.acos(a) },
-        $acosh(a) { return Math.acosh(a) },
-        $asin(a) { return Math.asin(a) },
-        $asinh(a) { return Math.asinh(a) },
-        $atan(a) { return Math.atan(a) },
-        $atan2(a, b) { return Math.atan2(a,b) },
-        $atanh(a) { return Math.atanh(a) },
-        $cbrt(a) { return Math.cbrt(a) },
-        $ceil(a) { return Math.ceil(a) },
-        $clz32(a) { return Math.clz32(a) },
-        $cos(a) { return Math.cos(a) },
-        $cosh(a) { return Math.cosh(a) },
-        $exp(a) { return Math.exp(a) },
-        $expm1(a) { return Math.expm1(a) },
-        $floor(a) { return Math.floor(a) },
-        $fround(a) { return Math.fround(a) },
-        $hypot(a, {value=0,array=[]}) { return Math.hypot(a,value,...array) },
-        $imul(a, {value}) { return Math.imul(a,value) },
-        $log(a, {value=Math.E}) { return Math.log(a)/Math.log(value) },
-        $log10(a) { return Math.log10(a) },
-        $log1p(a) { return Math.log1p(a) },
-        $log2(a) { return Math.log2(a) },
-        $max(a, {value,array}) { return Math.max(a,value,...array) },
-        $min(a, {value,array}) { return Math.min(a,value,...array) },
-        $pow(a, {value}) { return Math.pow(a,value) },
-        //$random(a) { return Math.random()*a },
-        $round(a) { return Math.round(a) },
-        $sign(a) { return Math.sign(a) },
-        $sin(a) { return Math.sin(a) },
-        $sinh(a) { return Math.sinh(a) },
-        $sqrt(a) { return Math.sqrt(a) },
-        $tan(a) { return Math.tan(a) },
-        $tanh(a) { return Math.tanh(a) },
-        $trunc(a) { return Math.trunc(a) }
+        // String and Type Conversion Transforms
+        $capitalize(a, {as}) {
+            return typeof a === 'string' ?
+                a.charAt(0).toUpperCase() + a.slice(1) : undefined;
+        },
+        $format(a, {as, format, values={}, precedence='context'}) {
+            if (a == null || format == null) return undefined;
+
+            // Convert the format string into a template literal
+            const template = format.replace(/\$\{([^}]+)\}/g, '${ctx.$1}');
+
+            // Determine spread order based on precedence
+            const baseContext = precedence === 'context' ?
+                { ...values, ...a } :    // context overrides values
+                { ...a, ...values };     // values override context
+
+            // Create the Proxy handler with both get and has traps
+            const proxyHandler = {
+                get(target, prop) {
+                    return target[prop];
+                },
+                has(target, prop) {
+                    return true;
+                }
+            };
+
+            // Wrap the context in a Proxy
+            const contextProxy = new Proxy(baseContext, proxyHandler);
+
+            // Create the template literal function
+            const templateFn = new Function('ctx', `
+            with(ctx) {
+                try {
+                    return \`${template}\`;
+                } catch(e) {
+                    return undefined;
+                }
+            }
+        `);
+
+            try {
+                // Execute template with proxied context
+                return templateFn(contextProxy);
+            } catch(e) {
+                return undefined;
+            }
+        },
+        $join(a, {as, separator=','}) {
+            return Array.isArray(a) ? a.join(separator) : undefined;
+        },
+        $replace(a, {as, pattern, replacement}) {
+            return typeof a === 'string' ?
+                a.replace(pattern, replacement) : undefined;
+        },
+        $split(a, {as, separator}) {
+            return typeof a === 'string' ? a.split(separator) : undefined;
+        },
+        $toBoolean(a, {as, truthy=['true', '1', 'yes'], falsy=['false', '0', 'no']}) {
+            if (typeof a === 'boolean') return a;
+            if (typeof a === 'string') {
+                if (truthy.includes(a.toLowerCase())) return true;
+                if (falsy.includes(a.toLowerCase())) return false;
+            }
+            return Boolean(a);
+        },
+        $toDate(a, {as}) {
+            const date = new Date(a);
+            return isNaN(date) ? undefined : date;
+        },
+        $toNumber(a, {as, radix=10}) {
+            const num = Number(a);
+            return isNaN(num) ? undefined : num;
+        },
+        $toString(a, {as}) {
+            return a != null ? String(a) : undefined;
+        },
+        $trim(a, {as}) {
+            return typeof a === 'string' ? a.trim() : undefined;
+        },
+        // Math Transforms
+        $abs(a, {as}) { return Math.abs(a) },
+        $acos(a, {as}) { return Math.acos(a) },
+        $acosh(a, {as}) { return Math.acosh(a) },
+        $asin(a, {as}) { return Math.asin(a) },
+        $asinh(a, {as}) { return Math.asinh(a) },
+        $atan(a, {as}) { return Math.atan(a) },
+        $atan2(a, {as, b}) { return Math.atan2(a,b) },
+        $atanh(a, {as}) { return Math.atanh(a) },
+        $cbrt(a, {as}) { return Math.cbrt(a) },
+        $ceil(a, {as}) { return Math.ceil(a) },
+        $clamp(a, {as, min, max}) {
+            return Math.min(Math.max(a, min), max)
+        },
+        $clz32(a, {as}) { return Math.clz32(a) },
+        $cos(a, {as}) { return Math.cos(a) },
+        $cosh(a, {as}) { return Math.cosh(a) },
+        $exp(a, {as}) { return Math.exp(a) },
+        $expm1(a, {as}) { return Math.expm1(a) },
+        $floor(a, {as}) { return Math.floor(a) },
+        $fround(a, {as}) { return Math.fround(a) },
+        $hypot(a, {as, value=0, array=[]}) { return Math.hypot(a,value,...array) },
+        $imul(a, {as, value}) { return Math.imul(a,value) },
+        $lerp(a, {as, target, alpha}) {
+            return a + (target - a) * alpha
+        },
+        $log(a, {as, value=Math.E}) { return Math.log(a)/Math.log(value) },
+        $log10(a, {as}) { return Math.log10(a) },
+        $log1p(a, {as}) { return Math.log1p(a) },
+        $log2(a, {as}) { return Math.log2(a) },
+        $max(a, {as, value, array=[]}) { return Math.max(a,value,...array) },
+        $min(a, {as, value, array=[]}) { return Math.min(a,value,...array) },
+        $normalize(a, {as, min, max}) {
+            return (a - min) / (max - min)
+        },
+        $percentile(a, {as, array=[], p=50}) {
+            const sorted = [...array, a].sort((a, b) => a - b);
+            const index = (p/100) * (sorted.length - 1);
+            const floor = Math.floor(index);
+            const ceil = Math.ceil(index);
+            if (floor === ceil) return sorted[floor];
+            return sorted[floor] * (ceil - index) + sorted[ceil] * (index - floor);
+        },
+        $pow(a, {as, value}) { return Math.pow(a,value) },
+        $round(a, {as}) { return Math.round(a) },
+        $sign(a, {as}) { return Math.sign(a) },
+        $sin(a, {as}) { return Math.sin(a) },
+        $sinh(a, {as}) { return Math.sinh(a) },
+        $sqrt(a, {as}) { return Math.sqrt(a) },
+        $statistics(a, {as, array=[]}) {
+            const values = [a, ...array].sort((a, b) => a - b);
+            const n = values.length;
+            const mean = values.reduce((sum, x) => sum + x, 0) / n;
+            const median = n % 2 === 0 ?
+                (values[n/2 - 1] + values[n/2]) / 2 :
+                values[Math.floor(n/2)];
+            const variance = values.reduce((sum, x) => sum + Math.pow(x - mean, 2), 0) / n;
+            const mode = values.reduce((acc, val) => {
+                acc.count[val] = (acc.count[val] || 0) + 1;
+                if (acc.count[val] > acc.maxCount) {
+                    acc.maxCount = acc.count[val];
+                    acc.mode = val;
+                }
+                return acc;
+            }, { count: {}, maxCount: 0, mode: values[0] }).mode;
+
+            return {
+                mean,
+                median,
+                mode,
+                variance,
+                stdDev: Math.sqrt(variance),
+                min: values[0],
+                max: values[n-1],
+                range: values[n-1] - values[0],
+                count: n
+            };
+        },
+        $tan(a, {as}) { return Math.tan(a) },
+        $tanh(a, {as}) { return Math.tanh(a) },
+        $trunc(a, {as}) { return Math.trunc(a) },
+
+        // Date functions
+        $dateFormat(a, {as, format='YYYY-MM-DD'}) {
+            // Support various input types
+            const date = a instanceof Date ? a : new Date(a);
+
+            // Check for invalid date
+            if (isNaN(date.getTime())) return undefined;
+
+            // Replace all tokens with their values
+            return format.replace(/\b[YMDdhmsaA]+\b/g, token => {
+                return dateTokens[token] ? dateTokens[token](date) : token;
+            });
+        }
     }
 
     function expandDotNotation(pattern) {
@@ -258,41 +608,6 @@
         return result;
     }
 
-    function query(data, pattern, {parentKey, parent} = {}) {
-        // Expand dot notation pattern before processing
-        const expandedPattern = expandDotNotation(pattern);
-
-        const array = Array.isArray(data) ? data : [data];
-        const results = array.reduce((results, value, i) => {
-            for (const key in expandedPattern) {
-                let result;
-                if (predicates[key]) {
-                    result = predicates[key](value, expandedPattern[key], {parentKey, key, parent});
-                } else if (tranforms[key]) {
-                    parent[expandedPattern[key].as || parentKey] = tranforms[key](value, expandedPattern[key], {parentKey, key, parent});
-                    continue;
-                } else if (typeof expandedPattern[key] === 'object') {
-                    result = query(value[key], expandedPattern[key], {parentKey: key, parent: value});
-                } else if (expandedPattern[key] === value[key]) {
-                    continue;
-                }
-
-                if (result === undefined) return results;
-
-                if (parentKey) {
-                    if (typeof result === "function") {
-                        value = result(parent, parentKey, value);
-                    } else if (parent[parentKey] !== result) {
-                        value = parent[parentKey] = result;
-                    }
-                }
-            }
-            results.push(value);
-            return results;
-        }, []);
-
-        return Array.isArray(data) ? results : results[0];
-    }
     // Flatten nested object path into dot notation
     const flattenPath = (obj) => {
         const result = {};
@@ -324,9 +639,18 @@
         }
 
         if (typeof criteria === 'object') {
+            if ('path' in criteria && 'direction' in criteria) {
+                // Already normalized format
+                return criteria;
+            }
+
             const flattened = flattenPath(criteria);
-            const [[path, direction]] = Object.entries(flattened);
-            return { path, direction };
+            for (const [path, direction] of Object.entries(flattened)) {
+                if (direction !== 'asc' && direction !== 'desc') {
+                    throw new Error(`Invalid sort direction: ${direction}. Must be 'asc' or 'desc'`);
+                }
+                return { path, direction };
+            }
         }
 
         throw new Error('Invalid sort criteria');
@@ -339,55 +663,6 @@
         }, obj);
     };
 
-    function sort(array, sort) {
-
-        // Create a copy of the array to avoid modifying the original
-        return [...array].sort((a, b) => {
-            // Iterate through each sort criteria
-            for (const criteria of sort) {
-                const { path, direction } = normalizeSortCriteria(criteria);
-
-                const aVal = getValue(a, path);
-                const bVal = getValue(b, path);
-
-                let comparison = 0;
-
-                // Handle undefined values
-                if (aVal === undefined && bVal === undefined) {
-                    comparison = 0;
-                } else if (aVal === undefined) {
-                    comparison = 1;
-                } else if (bVal === undefined) {
-                    comparison = -1;
-                }
-                // Compare dates
-                else if (aVal instanceof Date && bVal instanceof Date) {
-                    comparison = aVal.getTime() - bVal.getTime();
-                }
-                // Compare strings case-insensitively
-                else if (typeof aVal === 'string' && typeof bVal === 'string') {
-                    comparison = aVal.localeCompare(bVal);
-                }
-                // Compare numbers and other types
-                else {
-                    comparison = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-                }
-
-                // Apply sort direction
-                if (direction === 'desc') {
-                    comparison *= -1;
-                }
-
-                // If items are not equal, return the comparison
-                if (comparison !== 0) {
-                    return comparison;
-                }
-            }
-
-            // If all criteria are equal, maintain original order
-            return 0;
-        });
-    }
 
     async function setupIndexes(db) {
         // Create indexes for efficient querying
@@ -622,48 +897,142 @@
         );
     }
 
+    // Main ChocolateMango class
+    class ChocolateMango {
+        static #predicates = { ...predicates };
+        static #transforms = { ...transforms };
 
-    globalThis.ChocolateMango = {
-        dip(pouchdb,{vectors}={}) {
+        static addPredicate(name, predicateFn) {
+            if (typeof name !== 'string' || typeof predicateFn !== 'function') {
+                throw new Error('Predicate must have a string name and function implementation');
+            }
+            this.#predicates[name] = predicateFn;
+            return this;
+        }
+
+        static addTransform(name, transformFn) {
+            if (typeof name !== 'string' || typeof transformFn !== 'function') {
+                throw new Error('Transform must have a string name and function implementation');
+            }
+            this.#transforms[name] = transformFn;
+            return this;
+        }
+
+        static dip(pouchdb, { vectors } = {}) {
+            const oldFind = pouchdb.find;
+
             async function find(request) {
-                // convert the selector into one that only has valid PouchDB mango patterns associated with properties
-                let {selector,transform,filter,order,...rest} = request;
+                let { selector, transform, filter, order, ...rest } = request;
                 if (selector) {
                     selector = normalizeMangoQuery(selector);
                 }
-                const query = {selector};
-                if(!transform && !filter) return oldFind.call(this, {selector,order,...rest});
+                const query = { selector };
+                if (!transform && !filter) return oldFind.call(this, { selector, order, ...rest });
+
                 const findResult = await oldFind.call(this, query),
-                    transformResult = transform ? this.query(transform,findResult) : findResult,
-                    filterResult = filter ? this.query(filter,transformResult) : tranformResult,
-                    sortedResult = order ? this.sort(filterResult,order) : filterResult;
+                    transformResult = transform ? this.query(transform, findResult) : findResult,
+                    filterResult = filter ? this.query(filter, transformResult) : transformResult,
+                    sortedResult = order ? this.sort(filterResult, order) : filterResult;
+
                 return sortedResult;
             }
-            const oldFind = pouchdb.find;
+
             pouchdb.find = find;
 
-            if(vectors) {
+            if (vectors) {
                 [generateHash, createEmbedding, putVectorContent, removeVectorContent,searchVectorContent, calculateSimilarity, clearAll].forEach(value => {
                     Object.defineProperty(pouchdb, value.name, {configurable:true,writable:false,value})
                 })
             }
+
             return pouchdb;
-        },
-    };
-   /*(() => {
-        debugger;
-        const {query,sort} = ChocolateMango;
-        console.log(query(
-            [{balance: 10,owner:{age:10}}, {balance: 20,owner:{age:5}}, {balance: 10,owner:{age:20}}],
-            {balance: {$and:[{$default: {value: 10}}]}, owner: {age: {$gt: 5}}}
-        ));
-        console.log(query(
-            [{balance: 10,owner:{age:10}}, {balance: 20,owner:{age:5}}, {balance: 10,owner:{age:20}}],
-            {balance: {$and:[{$default: {value: 10}}]}, "owner.age": {$gt: 5}}
-        ));
-        console.log(sort(
-            [{balance: 10,owner:{age:10}}, {balance: 20,owner:{age:5}}, {balance: 10,owner:{age:20}}],
-            [{balance: 'asc'}, {owner:{age: 'desc'}}]
-        ));
-    })();*/
-})();
+        }
+
+        static query(data, pattern, {property, object} = {},recursion=0) {
+            // Expand dot notation pattern before processing
+            const expandedPattern = expandDotNotation(pattern);
+
+            const array = recursion>0 && Array.isArray(data) ? data : [data];
+            const results = array.reduce((results, value, i) => {
+                let result;
+                for (const key in expandedPattern) {
+                    if (this.#predicates[key]) {
+                        const predicate = this.#predicates[key];
+                        result = predicate.call(this.#predicates,value, expandedPattern[key], {transform: key, property, object});
+                        if(argLength(predicate)===1 && !expandedPattern[key] && result!==undefined) return results;
+                    } else if (this.#transforms[key]) {
+                        result = this.#transforms[key](value, expandedPattern[key], {transform: key, property, object});
+                        if (object) {
+                            if(result !== undefined) object[expandedPattern[key].as || property] = typeof result === "function" ? result(object, property, value) : result;
+                        } else {
+                            value = result;
+                        }
+                    } else if (typeof expandedPattern[key] === 'object') {
+                        result = this.query(value[key], expandedPattern[key], {property: key, object: value});
+                    } else if (expandedPattern[key] === value[key]) {
+                        result = value;
+                    }
+                    const type = typeof result;
+                    if(type==="function") result = result(value, key, object);
+                    if(type==="undefined") return results;
+                }
+                results.push(value);
+                return results;
+            }, []);
+            return recursion>0 && Array.isArray(data) ? results : results[0];
+        }
+
+        static sort(array, sortCriteria) {
+            // Create a copy of the array to avoid modifying the original
+            return [...array].sort((a, b) => {
+                // Iterate through each sort criteria
+                for (const criteria of sortCriteria) {
+                    const { path, direction } = normalizeSortCriteria(criteria);
+
+                    const aVal = getValue(a, path);
+                    const bVal = getValue(b, path);
+
+                    let comparison = 0;
+
+                    // Handle undefined values
+                    if (aVal === undefined && bVal === undefined) {
+                        comparison = 0;
+                    } else if (aVal === undefined) {
+                        comparison = 1;
+                    } else if (bVal === undefined) {
+                        comparison = -1;
+                    }
+                    // Compare dates
+                    else if (aVal instanceof Date && bVal instanceof Date) {
+                        comparison = aVal.getTime() - bVal.getTime();
+                    }
+                    // Compare strings case-insensitively
+                    else if (typeof aVal === 'string' && typeof bVal === 'string') {
+                        comparison = aVal.localeCompare(bVal);
+                    }
+                    // Compare numbers and other types
+                    else {
+                        comparison = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+                    }
+
+                    // Apply sort direction
+                    if (direction === 'desc') {
+                        comparison *= -1;
+                    }
+
+                    // If items are not equal, return the comparison
+                    if (comparison !== 0) {
+                        return comparison;
+                    }
+                }
+
+                // If all criteria are equal, maintain original order
+                return 0;
+            });
+        }
+    }
+
+    // Export both as default and named
+    export default ChocolateMango;
+    export { ChocolateMango };
+
