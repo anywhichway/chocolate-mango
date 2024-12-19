@@ -1,2 +1,2 @@
 # chocolate-mango
-Mago queries are sweet ... Chocolate Mago queries are even sweeter!
+Mango queries are sweet ... Chocolate Mango queries are even sweeter!
