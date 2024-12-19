@@ -102,7 +102,7 @@ const transformed = ChocolateMango.query(users, {
 const sorted = ChocolateMango.sort(result, [{ path: 'age', direction: 'desc' }]);
 ```
 
-Note, `query` will return the same type fo object is receives, e.g.
+Note, `query` will return the same type of object it receives, e.g.
 
 ```javascript
 ChocolateMango.query(5, { $eq: 5 }) // 5 not [5]
