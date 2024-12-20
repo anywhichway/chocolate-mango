@@ -14,6 +14,12 @@ It seamlessly integrates with PouchDB's existing find API while providing additi
 - Extended path notation support for nested objects
 - Compatible with existing PouchDB queries
 
+## Rationale
+- PouchDB is a great tool for offline-first applications, but its querying capabilities are limited
+- AI needs options for privacy first, offline first, and edge computing without custom mobile apps, i.e. using web technology. 
+  - A first step is to provide RAG support for private documents and local chat memory. RAG is best implemented with vectors.
+  - Users need to option to move and share the data that may be in the vector store, so building it on top of a database with solid replication support will save lots of effort and increase reliability.
+
 ## Installation
 
 ```bash
@@ -147,6 +153,9 @@ ChocolateMango.dip(db, { vectors: true });
 - [Vector Storage Documentation](./docs/vector-storage.md)
 
 ## Release History (Reverse Chronological Order)
+
+### Version 0.0.2 (2024-12-19)
+- Large number of unit tests along with fixes to bugs the exposed
 
 ### Version 0.0.1 (2024-12-19)
 - Initial documented release

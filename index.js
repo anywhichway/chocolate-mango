@@ -198,7 +198,7 @@
         // Array Predicates
         $all(a, array) { return Array.isArray(a) && array.every(value => a.includes(value)) ? a : undefined },
         $disjoint(a, b) { return Array.isArray(a) && Array.isArray(b) && !a.some(value => b.includes(value)) ? a : undefined },
-        $elemMatch(a, pattern, options) { return Array.isArray(a) && a.some(value => query(pattern, value, options)) ? a : undefined },
+        $elemMatch(a, pattern, options) { return Array.isArray(a) && a.some(value => ChocolateMango.query( value, pattern, options)) ? a : undefined },
         $excludes(a, b) { return Array.isArray(a) && Array.isArray(b) && !b.some(value => a.includes(value)) ? a : undefined },
         $includes(a, b) { return Array.isArray(a) && Array.isArray(b) && b.every(value => a.includes(value)) ? a : undefined },
         $intersects(a, b) { return Array.isArray(a) && Array.isArray(b) && a.some(value => b.includes(value)) ? a : undefined },
@@ -218,10 +218,10 @@
         $nin(a, b) { return !b.includes(a) ? a : undefined },
 
         // Logic Predicates
-        $and(a, array, options) { return array.every(pattern => query(pattern, a, options)) ? a : undefined },
-        $nor(a, array, options) { return !array.some(pattern => query(pattern, a, options)) ? a : undefined },
-        $not(a, pattern, options) { return !query(pattern, a, options) ? a : undefined },
-        $or(a, array, options) { return array.some(pattern => query(pattern, a, options)) ? a : undefined },
+        $and(a, array, options) { return array.every(pattern => ChocolateMango.query(a, pattern,options)) ? a : undefined },
+        $nor(a, array, options) { return !array.some(pattern => ChocolateMango.query(a, pattern, options)) ? a : undefined },
+        $not(a, pattern, options) { return !ChocolateMango.query(a, pattern, options) ? a : undefined },
+        $or(a, array, options) { return array.some(pattern => ChocolateMango.query(a, pattern, options)) ? a : undefined },
 
         // Number Predicates
         $inRange(a, [min, max, inclusive=true]) {
@@ -241,13 +241,28 @@
         $contains(a, b) { return typeof a === 'string' && a.includes(b) ? a : undefined },
         $echoes(a, b) { return soundex(String(a)) === soundex(String(b)) ? a : undefined },
         $endsWith(a, b) { return typeof a === 'string' && a.endsWith(b) ? a : undefined },
-        $isAlpha(a) { return /^[a-zA-Z]*$/.test(a) ? a : undefined },
-        $isAlphaNum(a) { return /^[a-zA-Z0-9]*$/.test(a) ? a : undefined },
-        $isBase64(a) { return /^[a-zA-Z0-9+/]*={0,2}$/.test(a) ? a : undefined },
+        $isAlpha(a) { return typeof a === "string" && /^[a-zA-Z]*$/.test(a) ? a : undefined },
+        $isAlphaNum(a) { return a!=null && (typeof a === "number" || /^[a-zA-Z0-9]*$/.test(a)) ? a : undefined },
+        $isBase64(a) { return /^[a-zA-Z0-9+/=]{4,}([a-zA-Z0-9+/=]{4})*={0,2}$/.test(a) ? a : undefined },
         $isEmail(a) { return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(a) ? a : undefined },
-        $isHex(a) { return /^[0-9a-fA-F]*$/.test(a) ? a : undefined },
-        $isIP4(a) { return /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(a) ? a : undefined },
-        $isIP6(a) { return /^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/.test(a) ? a : undefined },
+        $isHex(a) { return typeof a === "string" && /^[0-9a-fA-F]*$/.test(a) ? a : undefined },
+        $isIP4(a) {
+            const ipRegex = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+            const match = ipRegex.exec(a);
+            if (match) {
+                return match.slice(1).every(component => {
+                    const num = parseInt(component, 10);
+                    return num >= 0 && num <= 255;
+                }) ? a : undefined;
+            }
+            return undefined;
+        },
+        $isIP6(a) {
+            const ipv6Regex = /^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/;
+            const ipv6AbbrevRegex = /^([0-9a-fA-F]{1,4}:){1,7}:$/; // Abbreviated IPv6
+            const ipv6MixedRegex = /^([0-9a-fA-F]{1,4}:){6}(((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))$/; // Mixed IPv6
+            return (ipv6Regex.test(a) || ipv6AbbrevRegex.test(a) || ipv6MixedRegex.test(a)) ? a : undefined;
+        },
         $isNumeric(a) { return /^\d+$/.test(a) ? a : undefined },
         $isSSN(a) { return /^\d{3}-\d{2}-\d{4}$/.test(a) ? a : undefined },
         $isUSTel(a) { return /^\d{3}-\d{3}-\d{4}$/.test(a) ? a : undefined },
@@ -263,10 +278,14 @@
             if(!a || !b) return;
             const atype = typeof a,
                 btype = typeof b;
-            if(atype === "object" && btype === "object" && a instanceof b) return a;
+            if(atype === "object" && btype === "function" && a instanceof b) return a;
             if(atype === "object" && btype === "string" && b === a.constructor.name) return a;
         },
-        $isDate(a) { return !isNaN(Date.parse(a)) ? a : undefined },
+        $isDate(a) {
+            const type = typeof a;
+            if(a && type==="object" && a instanceof Date) return a;
+            if(type==="string" && !isNaN(Date.parse(a))) return a;
+        },
         $isJSON(a) {
             try { JSON.parse(a); return a; }
             catch(e) { return undefined; }
@@ -276,9 +295,9 @@
             if(!a || !b) return;
             const atype = typeof a,
                 btype = typeof b;
-            if(atype === "object" && btype === "object" && a instanceof b) return a;
+            if(atype === "object" && btype === "function" && a instanceof b) return a;
             if(atype === "object" && btype === "string" && b === a.constructor.name) return a;
-            if(atype === btype) return a;
+            if(atype === b && btype==="string") return a;
         },
         $typeof(a, b) { return typeof a === b ? a : undefined },
 
@@ -326,7 +345,7 @@
         $entries(a, {as}) { return Object.entries(a) },
         $eval(a, {as}) { return eval(a) },
         $keys(a, {as}) { return Object.keys(a) },
-        $parse(a, {as, reviver}) { return JSON.parse(a, reviver) },
+        $parse(a, {as, reviver}) { try { return JSON.parse(a, reviver); } catch(e) { undefined; } },
         $stringify(a, {as, replacer, space}) { return JSON.stringify(a, replacer, space) },
         $type(a, {as}) { return typeof a },
         $values(a, {as}) { return Object.values(a) },
@@ -353,8 +372,8 @@
         $dot(a, {as, value=0, array=[]}) {
             return [a,value,...array].reduce((dot,value) => dot + value * value, 0);
         },
-        $flatten(a, {as, depth}) {
-            return Array.isArray(a) ? (typeof depth==="number" ? a.flat(depth) : a.flat()) : undefined;
+        $flatten(a, {as, depth=Infinity}) {
+            return Array.isArray(a) ? a.flat(depth) : undefined;
         },
         $groupBy(a, {as, key}) {
             if (!Array.isArray(a)) return undefined;
@@ -373,7 +392,7 @@
         },
         $product(a, {as, value=1, array=[]}) {
             return Array.isArray(a) ?
-                a.flatMap(x => [value,...array].map(y => x * y)) :
+                [...a.map(x => x * value), ...a.flatMap(x => array.map(y => x * y))] :
                 undefined;
         },
         $push(a, {as, array}) {
@@ -382,7 +401,7 @@
         },
         $setDifference(a, {as, array}) {
             return Array.isArray(a) && Array.isArray(array) ?
-                a.filter(item => !array.includes(array)) : undefined;
+                a.filter(item => !array.includes(item)) : undefined;
         },
         $shift(a, {as}) {
             return Array.isArray(a) ? a.shift() : undefined;
@@ -394,13 +413,16 @@
             return Array.isArray(a) ? a.sort(compare) : undefined;
         },
         $splice(a, {as, start, deleteCount, items=[]}) {
-            return Array.isArray(a) ? a.splice(start,deleteCount,...items) : undefined;
+            if(Array.isArray(a)) {
+                a.splice(start,deleteCount,...items);
+                return a;
+            }
         },
         $sum(a, {as, value=0, array=[]}) {
             return [a,value,...array].reduce((sum,value) => sum + value, 0);
         },
         $union(a, {as, array}) {
-            return Array.isArray(a) && Array.isArray(b) ?
+            return Array.isArray(a) && Array.isArray(array) ?
                 [...new Set([...a, ...array])] : undefined;
         },
         $unique(a, {as}) {
@@ -416,11 +438,8 @@
             return typeof a === 'string' ?
                 a.charAt(0).toUpperCase() + a.slice(1) : undefined;
         },
-        $format(a, {as, format, values={}, precedence='context'}) {
-            if (a == null || format == null) return undefined;
-
-            // Convert the format string into a template literal
-            const template = format.replace(/\$\{([^}]+)\}/g, '${ctx.$1}');
+        $format(a, {as, template, values={}, precedence='context'}) {
+            if (a == null || template == null) return undefined;
 
             // Determine spread order based on precedence
             const baseContext = precedence === 'context' ?
@@ -484,8 +503,8 @@
             const num = Number(a);
             return isNaN(num) ? undefined : num;
         },
-        $toString(a, {as}) {
-            return a != null ? String(a) : undefined;
+        $toString(a, {as,allowNull}) {
+            return a != null || allowNull ? String(a) : undefined;
         },
         $trim(a, {as}) {
             return typeof a === 'string' ? a.trim() : undefined;
@@ -580,10 +599,11 @@
             // Check for invalid date
             if (isNaN(date.getTime())) return undefined;
 
-            // Replace all tokens with their values
-            return format.replace(/\b[YMDdhmsaA]+\b/g, token => {
-                return dateTokens[token] ? dateTokens[token](date) : token;
-            });
+            // Make replacements from a map of exact tokens
+            return format
+                .split(/(\bYYYY\b|\bYY\b|\bMMMM\b|\bMMM\b|\bMM\b|\bM\b|\bDDDD\b|\bDDD\b|\bDD\b|\bD\b|\bHH\b|\bH\b|\bhh\b|\bh\b|\bmm\b|\bm\b|\bss\b|\bs\b|\bSSS\b|\bA\b|\ba\b)/)
+                .map(token => dateTokens[token] ? dateTokens[token](date) : token)
+                .join('');
         }
     }
 
@@ -779,20 +799,6 @@
         return chunks;
     }
 
-    // Create a simple embedding using term frequency
-    function createEmbedding(text) {
-        const words = text.toLowerCase().split(/\W+/);
-        const frequency = {};
-
-        for (let word of words) {
-            if (word) {
-                frequency[word] = (frequency[word] || 0) + 1;
-            }
-        }
-
-        return frequency;
-    }
-
     // Search for similar documents using cosine similarity
     async function searchVectorContent(query, {limit = 5,maxLength=5000,strategy="share"} = {}) {
         const queryEmbedding = this.createEmbedding(query);
@@ -871,24 +877,6 @@
         return results;
     }
 
-    // Calculate cosine similarity between query and document embeddings
-    function calculateSimilarity(embedding1, embedding2={}) {
-        const keys = new Set([...Object.keys(embedding1), ...Object.keys(embedding2)]);
-        let dotProduct = 0;
-        let norm1 = 0;
-        let norm2 = 0;
-
-        for (let key of keys) {
-            const val1 = embedding1[key] || 0;
-            const val2 = embedding2[key] || 0;
-            dotProduct += val1 * val2;
-            norm1 += val1 * val1;
-            norm2 += val2 * val2;
-        }
-
-        return dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2) || 1);
-    }
-
     // Clear all documents
     async function clearAll() {
         const docs = await this.getAllDocuments();
@@ -899,22 +887,19 @@
 
     // Main ChocolateMango class
     class ChocolateMango {
-        static #predicates = { ...predicates };
-        static #transforms = { ...transforms };
-
         static addPredicate(name, predicateFn) {
-            if (typeof name !== 'string' || typeof predicateFn !== 'function') {
-                throw new Error('Predicate must have a string name and function implementation');
+            if (typeof name !== 'string' || name[0]!=="$" || typeof predicateFn !== 'function') {
+                throw new Error('Predicate must have a string name starting with $ and function implementation');
             }
-            this.#predicates[name] = predicateFn;
+            predicates[name] = predicateFn;
             return this;
         }
 
         static addTransform(name, transformFn) {
-            if (typeof name !== 'string' || typeof transformFn !== 'function') {
-                throw new Error('Transform must have a string name and function implementation');
+            if (typeof name !== 'string' || name[0]!=="$" || typeof transformFn !== 'function') {
+                throw new Error('Transform must have a string name starting with $ and function implementation');
             }
-            this.#transforms[name] = transformFn;
+           transforms[name] = transformFn;
             return this;
         }
 
@@ -940,12 +925,47 @@
             pouchdb.find = find;
 
             if (vectors) {
-                [generateHash, createEmbedding, putVectorContent, removeVectorContent,searchVectorContent, calculateSimilarity, clearAll].forEach(value => {
+                [generateHash, this.createEmbedding, putVectorContent, removeVectorContent,searchVectorContent, this.calculateSimilarity, clearAll, this.query, this.sort].forEach(value => {
                     Object.defineProperty(pouchdb, value.name, {configurable:true,writable:false,value})
                 })
             }
 
             return pouchdb;
+        }
+
+        // Create a simple embedding using term frequency
+        static createEmbedding(text) {
+            const words = text.toLowerCase().split(/\W+/);
+            const frequency = {};
+
+            for (let word of words) {
+                if (word) {
+                    frequency[word] = (frequency[word] || 0) + 1;
+                }
+            }
+
+            return frequency;
+        }
+
+        // Calculate cosine similarity between query and document embeddings
+        static calculateSimilarity(embedding1, embedding2={}) {
+            const keys = new Set([...Object.keys(embedding1), ...Object.keys(embedding2)]);
+            if(keys.size===0) return 1;
+            let dotProduct = 0;
+            let norm1 = 0;
+            let norm2 = 0;
+
+            for (let key of keys) {
+                const val1 = embedding1[key] || 0;
+                const val2 = embedding2[key] || 0;
+                dotProduct += val1 * val2;
+                norm1 += val1 * val1;
+                norm2 += val2 * val2;
+            }
+
+            const result = dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2) || 1);
+            if(result>=0.99999) return 1;
+            return result;
         }
 
         static query(data, pattern, {property, object} = {},recursion=0) {
@@ -956,12 +976,12 @@
             const results = array.reduce((results, value, i) => {
                 let result;
                 for (const key in expandedPattern) {
-                    if (this.#predicates[key]) {
-                        const predicate = this.#predicates[key];
-                        result = predicate.call(this.#predicates,value, expandedPattern[key], {transform: key, property, object});
+                    if (predicates[key]) {
+                        const predicate = predicates[key];
+                        result = predicate.call(predicates,value, expandedPattern[key], {transform: key, property, object});
                         if(argLength(predicate)===1 && !expandedPattern[key] && result!==undefined) return results;
-                    } else if (this.#transforms[key]) {
-                        result = this.#transforms[key](value, expandedPattern[key], {transform: key, property, object});
+                    } else if (transforms[key]) {
+                        result = transforms[key](value, expandedPattern[key], {transform: key, property, object});
                         if (object) {
                             if(result !== undefined) object[expandedPattern[key].as || property] = typeof result === "function" ? result(object, property, value) : result;
                         } else {
