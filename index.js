@@ -332,6 +332,7 @@
 
     const transforms = {
         // Utility Transforms
+        $drop(a,f,...rest) { return typeof f === "function" ? (f(a,...rest) ? undefined : true): (f ? undefined : a) },
         $call(a, {as, f}) { return f(a) },
         $classname(a, {as}) { return a.constructor.name },
         $default(a, {as, value}) { return a==null ? value : a },
@@ -885,6 +886,126 @@
         );
     }
 
+    async function clearVectorContent({
+                                          startDate = null,
+                                          endDate = null,
+                                          inclusive = true,
+                                          text = null,
+                                          useRegex = false
+                                      } = {}) {
+        // Convert date strings to Date objects if they're provided as strings
+        if (startDate && typeof startDate === 'string') {
+            startDate = new Date(startDate);
+        }
+        if (endDate && typeof endDate === 'string') {
+            endDate = new Date(endDate);
+        }
+
+        // Validate dates if provided
+        if (startDate && isNaN(startDate.getTime())) {
+            throw new Error('Invalid start date provided');
+        }
+        if (endDate && isNaN(endDate.getTime())) {
+            throw new Error('Invalid end date provided');
+        }
+        if (startDate && endDate && startDate > endDate) {
+            throw new Error('Start date cannot be after end date');
+        }
+
+        let docsToRemove;
+
+        if (text !== null) {
+            if (useRegex) {
+                // Use regex search
+                const selector = {
+                    RAGcontent: {
+                        $exists: true,
+                        $regex: new RegExp(text)
+                    }
+                };
+
+                // Add date criteria if provided
+                if (startDate || endDate) {
+                    selector.timestamp = {};
+                    if (startDate) {
+                        selector.timestamp[inclusive ? '$gte' : '$gt'] = startDate.getTime();
+                    }
+                    if (endDate) {
+                        selector.timestamp[inclusive ? '$lte' : '$lt'] = endDate.getTime();
+                    }
+                }
+
+                docsToRemove = await this.find({
+                    selector: selector,
+                    fields: ['_id', '_rev']
+                });
+                docsToRemove = docsToRemove.docs;
+            } else {
+                // Use vector search
+                const searchResults = await this.searchVectorContent(text, {
+                    limit: Number.MAX_SAFE_INTEGER // Get all matching documents
+                });
+
+                // Filter by date if needed
+                docsToRemove = searchResults
+                    .map(result => result.doc)
+                    .filter(doc => {
+                        if (!startDate && !endDate) return true;
+
+                        const docDate = doc.timestamp;
+                        if (inclusive) {
+                            if (startDate && docDate < startDate.getTime()) return false;
+                            if (endDate && docDate > endDate.getTime()) return false;
+                        } else {
+                            if (startDate && docDate <= startDate.getTime()) return false;
+                            if (endDate && docDate >= endDate.getTime()) return false;
+                        }
+                        return true;
+                    });
+            }
+        } else if (startDate || endDate) {
+            // Date-only search for vectors
+            const selector = {
+                RAGcontent: { $exists: true },
+                timestamp: {}
+            };
+            if (startDate) {
+                selector.timestamp[inclusive ? '$gte' : '$gt'] = startDate.getTime();
+            }
+            if (endDate) {
+                selector.timestamp[inclusive ? '$lte' : '$lt'] = endDate.getTime();
+            }
+            const result = await this.find({
+                selector: selector,
+                fields: ['_id', '_rev']
+            });
+            docsToRemove = result.docs;
+        } else {
+            // No criteria - return empty array
+            docsToRemove = [];
+        }
+
+        // Get total count before deletion
+        const totalCount = (await this.find({
+            selector: {
+                RAGcontent: { $exists: true }
+            },
+            fields: ['_id']
+        })).docs.length;
+
+        // Remove the filtered documents
+        const removalResults = await Promise.all(
+            docsToRemove.map(doc => this.remove(doc))
+        );
+
+        return {
+            removedCount: removalResults.length,
+            totalCount: totalCount,
+            remainingCount: totalCount - removalResults.length,
+            searchMethod: text ? (useRegex ? 'regex' : 'vector') : 'date-only'
+        };
+    }
+
     // Main ChocolateMango class
     class ChocolateMango {
         static addPredicate(name, predicateFn) {
@@ -903,7 +1024,10 @@
             return this;
         }
 
-        static dip(pouchdb, { vectors } = {}) {
+        static dip(pouchdb, { vectors, liveObjects } = {}) {
+            if(liveObjects) {
+                this.liveObjects(pouchdb,liveObjects)
+            }
             const oldFind = pouchdb.find;
 
             async function find(request) {
@@ -925,7 +1049,7 @@
             pouchdb.find = find;
 
             if (vectors) {
-                [generateHash, this.createEmbedding, putVectorContent, removeVectorContent,searchVectorContent, this.calculateSimilarity, clearAll, this.query, this.sort].forEach(value => {
+                [generateHash, this.createEmbedding, putVectorContent, removeVectorContent,searchVectorContent, clearVectorContent, this.calculateSimilarity, clearAll, this.query, this.sort].forEach(value => {
                     Object.defineProperty(pouchdb, value.name, {configurable:true,writable:false,value})
                 })
             }
@@ -983,7 +1107,16 @@
                     } else if (transforms[key]) {
                         result = transforms[key](value, expandedPattern[key], {transform: key, property, object});
                         if (object) {
-                            if(result !== undefined) object[expandedPattern[key].as || property] = typeof result === "function" ? result(object, property, value) : result;
+                            if(result===undefined) {
+                                if(key==="$drop") {
+                                    delete object[property];
+                                }
+                                continue;
+                            } else if(key==="$drop") {
+                                continue;
+                            } else {
+                                object[expandedPattern[key].as || property] = typeof result === "function" ? result(object, property, value) : result;
+                            }
                         } else {
                             value = result;
                         }
@@ -1049,6 +1182,104 @@
                 // If all criteria are equal, maintain original order
                 return 0;
             });
+        }
+        static liveObjects(pouchdb, global = false) {
+            // Add properties to track class name usage and prototypes
+            Object.defineProperties(pouchdb, {
+                liveObjects: {
+                    value: global,
+                    writable: true,
+                    configurable: true
+                },
+                classPrototypes: {
+                    value: {},
+                    writable: true,
+                    configurable: true
+                }
+            });
+
+            // Create index for  _class_nameif it doesn't exist
+            pouchdb.createIndex({
+                index: {
+                    fields: [':.cname']
+                }
+            }).catch(err => console.error('Error creating :.cname index:', err));
+
+            // Store original functions
+            const originalPut = pouchdb.put;
+            const originalGet = pouchdb.get;
+            const originalFind = pouchdb.find;
+
+            // Helper function to convert document to class instance
+            function docToInstance(doc) {
+                const metadata = doc[":"];
+                if (!doc || !metadata) return doc;
+
+                let prototype = pouchdb.classPrototypes[metadata.cname];
+
+                // If prototype not found in local registry, look in globalThis
+                if (!prototype && globalThis[metadata.cname]) {
+                    prototype = globalThis[metadata.cname].prototype;
+                    // Cache the prototype for future use
+                    pouchdb.classPrototypes[metadata.cname] = prototype;
+                }
+
+                if (!prototype) return doc;
+
+                // Create new object with the prototype and copy document properties
+                const instance = Object.create(prototype);
+                Object.assign(instance, doc);
+                Object.defineProperty(instance, ':', { enumerable:false,configirable:false,writable: true,value: metadata  });
+                return instance;
+            }
+
+            // Override put function
+            pouchdb.put = async function(doc, options = {}) {
+                const liveObject = options.liveObject ?? this.liveObjects;
+
+                if (liveObject && doc && typeof doc === 'object') {
+                    const constructorName = doc.constructor.name;
+                    if (constructorName !== 'Object') {
+                        const metadata = doc[":"]||{},
+                            proto = Object.getPrototypeOf(doc);
+                        metadata.cname = constructorName;
+                        doc = { ...doc };
+                        doc[":"] = metadata;
+                        // Store prototype if not already stored
+                        if (!this.classPrototypes[constructorName]) {
+                            this.classPrototypes[constructorName] = proto;
+                        }
+                    }
+                }
+
+                return originalPut.call(this, doc, options);
+            };
+
+            // Override get function
+            pouchdb.get = async function(docId, options = {}) {
+                const liveObject = options.liveObject ?? this.liveObjects;
+                const doc = await originalGet.call(this, docId, options);
+
+                if (liveObject) {
+                    return docToInstance(doc);
+                }
+
+                return doc;
+            };
+
+            // Override find function
+            pouchdb.find = async function(request = {}) {
+                const liveObject = request.liveObject ?? this.liveObjects;
+                const result = await originalFind.call(this, request);
+
+                if (liveObject && result.docs) {
+                    result.docs = result.docs.map(doc => docToInstance(doc));
+                }
+
+                return result;
+            };
+
+            return pouchdb;
         }
     }
 

@@ -2,8 +2,9 @@
 
 Mango queries are sweet ... Chocolate Mango queries are even sweeter!
 
-ChocolateMango is a powerful extension for PouchDB that adds advanced querying capabilities, data transformation, and vector storage functionality.
-It seamlessly integrates with PouchDB's existing find API while providing additional features for filtering, transforming, and sorting documents, and can also be used directly for querying in-memory data structures.
+ChocolateMango is a powerful extension for PouchDB that adds advanced querying capabilities, data transformation, vector storage, and live object functionality.
+It seamlessly integrates with PouchDB's existing find API while providing additional features for filtering, transforming, and sorting documents, 
+and querying in-memory data structures.
 
 ## Features
 
@@ -13,10 +14,11 @@ It seamlessly integrates with PouchDB's existing find API while providing additi
 - Vector storage and similarity search
 - Extended path notation support for nested objects
 - Compatible with existing PouchDB queries
+- Live objects ... insert a Person and get a Person object back with methods and properties
 
 ## Rationale
 - PouchDB is a great tool for offline-first applications, but its querying capabilities are limited
-- AI needs options for privacy first, offline first, and edge computing without custom mobile apps, i.e. using web technology. 
+- AI needs options for privacy first, offline first, and edge computing without custom mobile apps, i.e. there need to be web technology options. 
   - A first step is to provide RAG support for private documents and local chat memory. RAG is best implemented with vectors.
   - Users need the option to move and share the data that may be in the vector store, so building it on top of a database with solid replication support will save lots of effort and increase reliability.
 
@@ -31,11 +33,11 @@ npm install chocolate-mango
 ### With PouchDB
 
 ```javascript
-import PouchDB from 'pouchdb';
-import pouchDBFind from 'pouchdb-find';
+import PouchDB from 'https://cdn.skypack.dev/pouchdb';
+import pouchDBFind from 'https://cdn.skypack.dev/pouchdb-find';
 import ChocolateMango from 'chocolate-mango';
 
-PouchDB.plugin(pouchDBFind);
+PouchDB.plugin(pouchDBFind); // you must add this plugin
 
 // Initialize PouchDB with ChocolateMango
 const db = new PouchDB('mydb');
@@ -151,6 +153,40 @@ Enable vector storage capabilities when initializing ChocolateMango:
 ChocolateMango.dip(db, { vectors: true });
 ```
 
+## Live Objects
+
+```javascript
+import PouchDB from 'https://cdn.skypack.dev/pouchdb';
+    import pouchDBFind from 'https://cdn.skypack.dev/pouchdb-find';
+    import ChocolateMango from './index.js';
+
+    PouchDB.plugin(pouchDBFind);
+
+    // Initialize PouchDB with ChocolateMango
+    const db = new PouchDB('mydb');
+    ChocolateMango.dip(db,{liveObjects:true});
+
+    // Create a class
+    class Person {
+        constructor(props={}) {
+            this._id = props.id || crypto.randomUUID();
+        }
+
+        sayHello() {
+            return `Hello, I'm ${this.name}`;
+        }
+    }
+
+    // Store an instance
+    const person = new Person();
+    person.name = "John";
+    await db.put(person);
+    
+    const retrieved = await db.get(person._id);
+    console.log(retrieved.sayHello()); // "Hello, I'm John"
+```
+
+
 ## Documentation
 
 - [Predicates Documentation](./docs/predicates.md)
@@ -158,6 +194,9 @@ ChocolateMango.dip(db, { vectors: true });
 - [Vector Storage Documentation](./docs/vector-storage.md)
 
 ## Release History (Reverse Chronological Order)
+
+### Version 0.0.3 (2024-12-20)
+- added $drop and live objects
 
 ### Version 0.0.2 (2024-12-19)
 - Large number of unit tests along with fixes to bugs the exposed

@@ -1,8 +1,7 @@
+
 import { ChocolateMango } from './index.js';
 
-
-
-describe('ChocolateMango Predicates', () => {
+describe('ChocolateMango Predicates & Transforms', () => {
     // Helper function to run queries
     const runQuery = (data, pattern) => ChocolateMango.query(data, pattern);
 
@@ -433,6 +432,12 @@ describe('ChocolateMango Predicates', () => {
         const runTransform = (data, pattern) => ChocolateMango.query(data, pattern);
 
         describe('Utility Transforms', () => {
+            test('$drop removes a property', () => {
+                expect(runTransform({name:"joe",age:20}, { name: { $drop: true } })).toEqual({age:20});
+                expect(runTransform({name:"joe",age:20}, { name: { $drop: false } })).toEqual({name:"joe",age:20});
+                expect(runTransform({name:"joe",age:20}, { name: { $drop: (name,{object}) => object.age<21 } })).toEqual({age:20});
+                expect(runTransform({name:"joe",age:20},{name: {$drop: ()=>false}})).toEqual({name:"joe",age:20});
+            });
             test('$call executes function on value', () => {
                 const double = x => x * 2;
                 expect(runTransform(5, { $call: { f: double } })).toBe(10);
@@ -950,3 +955,4 @@ describe('ChocolateMango Predicates', () => {
         });
     });
 });
+
