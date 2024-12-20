@@ -18,7 +18,7 @@ It seamlessly integrates with PouchDB's existing find API while providing additi
 - PouchDB is a great tool for offline-first applications, but its querying capabilities are limited
 - AI needs options for privacy first, offline first, and edge computing without custom mobile apps, i.e. using web technology. 
   - A first step is to provide RAG support for private documents and local chat memory. RAG is best implemented with vectors.
-  - Users need to option to move and share the data that may be in the vector store, so building it on top of a database with solid replication support will save lots of effort and increase reliability.
+  - Users need the option to move and share the data that may be in the vector store, so building it on top of a database with solid replication support will save lots of effort and increase reliability.
 
 ## Installation
 
