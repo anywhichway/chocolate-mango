@@ -32,7 +32,10 @@ npm install chocolate-mango
 
 ```javascript
 import PouchDB from 'pouchdb';
+import pouchDBFind from 'pouchdb-find';
 import ChocolateMango from 'chocolate-mango';
+
+PouchDB.plugin(pouchDBFind);
 
 // Initialize PouchDB with ChocolateMango
 const db = new PouchDB('mydb');
@@ -113,6 +116,8 @@ Note, `query` will return the same type of object it receives, e.g.
 ```javascript
 ChocolateMango.query(5, { $eq: 5 }) // 5 not [5]
 ```
+
+The methods are also available on your PouchDB instance after you have dipped it.
 
 ## Find API
 
