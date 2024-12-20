@@ -2,7 +2,7 @@
 
 Mango queries are sweet ... Chocolate Mango queries are even sweeter!
 
-ChocolateMango is a powerful extension for PouchDB that adds advanced querying capabilities, data transformation, vector storage, and live object functionality.
+ChocolateMango is a powerful extension for PouchDB that adds advanced querying capabilities, data transformation, vector storage, plus live object and trigger functionality.
 It seamlessly integrates with PouchDB's existing find API while providing additional features for filtering, transforming, and sorting documents, 
 and querying in-memory data structures.
 
@@ -15,9 +15,10 @@ and querying in-memory data structures.
 - Extended path notation support for nested objects
 - Compatible with existing PouchDB queries
 - Live objects ... insert a Person and get a Person object back with methods and properties
+- Triggers support *, new, changed, and deleted events with Mango patterns
 
 ## Rationale
-- PouchDB is a great tool for offline-first applications, but its querying capabilities are limited
+- PouchDB is a great tool for offline-first applications, but its querying and trigger capabilities are limited
 - AI needs options for privacy first, offline first, and edge computing without custom mobile apps, i.e. there need to be web technology options. 
   - A first step is to provide RAG support for private documents and local chat memory. RAG is best implemented with vectors.
   - Users need the option to move and share the data that may be in the vector store, so building it on top of a database with solid replication support will save lots of effort and increase reliability.
@@ -153,7 +154,7 @@ Enable vector storage capabilities when initializing ChocolateMango:
 ChocolateMango.dip(db, { vectors: true });
 ```
 
-## Live Objects
+## Live Objects & Triggers
 
 ```javascript
 import PouchDB from 'https://cdn.skypack.dev/pouchdb';
@@ -164,7 +165,7 @@ import PouchDB from 'https://cdn.skypack.dev/pouchdb';
 
     // Initialize PouchDB with ChocolateMango
     const db = new PouchDB('mydb');
-    ChocolateMango.dip(db,{liveObjects:true});
+    ChocolateMango.dip(db,{liveObjects:true,triggers:true});
 
     // Create a class
     class Person {
@@ -176,6 +177,14 @@ import PouchDB from 'https://cdn.skypack.dev/pouchdb';
             return `Hello, I'm ${this.name}`;
         }
     }
+
+    // event can be any *, new, updated, deleted
+    // patterns can be any mango pattern
+    // callback gets the event and the document and pattern
+    // if a regular function is used, it will be called with this as the db
+    db.createTrigger('*', {name : {$exists: true}}, async function(event,doc,pattern)  {
+      console.log(`${event}:`, doc);
+    });
 
     // Store an instance
     const person = new Person();
@@ -194,6 +203,9 @@ import PouchDB from 'https://cdn.skypack.dev/pouchdb';
 - [Vector Storage Documentation](./docs/vector-storage.md)
 
 ## Release History (Reverse Chronological Order)
+
+### Version 0.0.4 (2024-12-20)
+- added triggers
 
 ### Version 0.0.3 (2024-12-20)
 - added $drop and live objects

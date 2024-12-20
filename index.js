@@ -1006,6 +1006,214 @@
         };
     }
 
+    function setupLiveObjects(pouchdb, global = false) {
+        // Add properties to track class name usage and prototypes
+        Object.defineProperties(pouchdb, {
+            liveObjects: {
+                value: global,
+                writable: true,
+                configurable: true
+            },
+            classPrototypes: {
+                value: {},
+                writable: true,
+                configurable: true
+            }
+        });
+
+        // Create index for  _class_nameif it doesn't exist
+        pouchdb.createIndex({
+            index: {
+                fields: [':.cname']
+            }
+        }).catch(err => console.error('Error creating :.cname index:', err));
+
+        // Store original functions
+        const originalPut = pouchdb.put;
+        const originalGet = pouchdb.get;
+        const originalFind = pouchdb.find;
+
+        // Helper function to convert document to class instance
+        function docToInstance(doc) {
+            const metadata = doc[":"];
+            if (!doc || !metadata) return doc;
+
+            let prototype = pouchdb.classPrototypes[metadata.cname];
+
+            // If prototype not found in local registry, look in globalThis
+            if (!prototype && globalThis[metadata.cname]) {
+                prototype = globalThis[metadata.cname].prototype;
+                // Cache the prototype for future use
+                pouchdb.classPrototypes[metadata.cname] = prototype;
+            }
+
+            if (!prototype) return doc;
+
+            // Create new object with the prototype and copy document properties
+            const instance = Object.create(prototype);
+            Object.assign(instance, doc);
+            Object.defineProperty(instance, ':', { enumerable:false,configirable:false,writable: true,value: metadata  });
+            return instance;
+        }
+
+        // Override put function
+        pouchdb.put = async function(doc, options = {}) {
+            const liveObject = options.liveObject ?? this.liveObjects;
+
+            if (liveObject && doc && typeof doc === 'object') {
+                const constructorName = doc.constructor.name;
+                if (constructorName !== 'Object') {
+                    const metadata = doc[":"]||{},
+                        proto = Object.getPrototypeOf(doc);
+                    metadata.cname = constructorName;
+                    doc = { ...doc };
+                    doc[":"] = metadata;
+                    // Store prototype if not already stored
+                    if (!this.classPrototypes[constructorName]) {
+                        this.classPrototypes[constructorName] = proto;
+                    }
+                }
+            }
+
+            return originalPut.call(this, doc, options);
+        };
+
+        // Override get function
+        pouchdb.get = async function(docId, options = {}) {
+            const liveObject = options.liveObject ?? this.liveObjects;
+            const doc = await originalGet.call(this, docId, options);
+
+            if (liveObject) {
+                return docToInstance(doc);
+            }
+
+            return doc;
+        };
+
+        // Override find function
+        pouchdb.find = async function(request = {}) {
+            const liveObject = request.liveObject ?? this.liveObjects;
+            const result = await originalFind.call(this, request);
+
+            if (liveObject && result.docs) {
+                result.docs = result.docs.map(doc => docToInstance(doc));
+            }
+
+            return result;
+        };
+
+        return pouchdb;
+    }
+
+    function setupTriggers(pouchdb) {
+        // Store triggers in a Map on the database instance
+        const _triggers = new Map();
+        let _changes = null;
+
+        // Set up changes listener
+        function setupChangesListener() {
+            if (_changes) {
+                _changes.cancel();
+            }
+
+            _changes = pouchdb.changes({
+                since: 'now',
+                live: true,
+                include_docs: true
+            });
+
+            _changes.on('change', (change) => {
+                processTriggers(change);
+            });
+        }
+
+        // Process triggers based on database changes
+        function processTriggers(change) {
+            const eventType = change.deleted ? 'delete' : change.doc._rev.startsWith('1-') ? 'new' : 'change';
+
+            // Process triggers for both the specific event type and wildcard triggers
+            ['*', eventType].forEach(type => {
+                if (_triggers.has(type)) {
+                    const triggersForType = _triggers.get(type);
+                    triggersForType.forEach(trigger => {
+                        if (matchesFilter(change.doc, trigger.filter)) {
+                            trigger.callback.call(pouchdb,eventType, change.doc, trigger.filter);
+                        }
+                    });
+                }
+            });
+        }
+
+        // Check if a document matches the provided filter using ChocolateMango query
+        function matchesFilter(doc, filter) {
+            if (!filter || Object.keys(filter).length === 0) {
+                return true;
+            }
+            return ChocolateMango.query(doc, filter) !== undefined;
+        }
+            // Create a trigger
+        function createTrigger(eventType, filter, callback) {
+            const validEventTypes = ['*', 'new', 'change', 'delete'];
+
+            if (!validEventTypes.includes(eventType)) {
+                throw new Error(`Invalid event type. Must be one of: ${validEventTypes.join(', ')}`);
+            }
+
+            if (typeof callback !== 'function') {
+                throw new Error('Callback must be a function');
+            }
+
+            const triggerId = crypto.randomUUID();
+            const triggerData = {
+                id: triggerId,
+                filter: filter || {},
+                callback
+            };
+
+            if (!_triggers.has(eventType)) {
+                _triggers.set(eventType, new Set());
+            }
+
+            _triggers.get(eventType).add(triggerData);
+            return triggerId;
+        }
+
+        // Remove a trigger by its ID
+        function removeTrigger(triggerId) {
+            let removed = false;
+
+            _triggers.forEach((triggers) => {
+                triggers.forEach((trigger) => {
+                    if (trigger.id === triggerId) {
+                        triggers.delete(trigger);
+                        removed = true;
+                    }
+                });
+            });
+
+            return removed;
+        }
+
+        // Clean up triggers and change listener
+        function destroyTriggers() {
+            if (_changes) {
+                _changes.cancel();
+                _changes = null;
+            }
+            _triggers.clear();
+        }
+
+        // Add methods to the database instance
+        Object.assign(pouchdb, {
+            createTrigger,
+            removeTrigger,
+            destroyTriggers
+        });
+
+        // Initialize the changes listener
+        setupChangesListener();
+    }
+
     // Main ChocolateMango class
     class ChocolateMango {
         static addPredicate(name, predicateFn) {
@@ -1024,9 +1232,12 @@
             return this;
         }
 
-        static dip(pouchdb, { vectors, liveObjects } = {}) {
+        static dip(pouchdb, { vectors, liveObjects, triggers } = {}) {
             if(liveObjects) {
-                this.liveObjects(pouchdb,liveObjects)
+                setupLiveObjects(pouchdb,liveObjects)
+            }
+            if(triggers) {
+                setupTriggers(pouchdb,triggers)
             }
             const oldFind = pouchdb.find;
 
@@ -1183,104 +1394,7 @@
                 return 0;
             });
         }
-        static liveObjects(pouchdb, global = false) {
-            // Add properties to track class name usage and prototypes
-            Object.defineProperties(pouchdb, {
-                liveObjects: {
-                    value: global,
-                    writable: true,
-                    configurable: true
-                },
-                classPrototypes: {
-                    value: {},
-                    writable: true,
-                    configurable: true
-                }
-            });
 
-            // Create index for  _class_nameif it doesn't exist
-            pouchdb.createIndex({
-                index: {
-                    fields: [':.cname']
-                }
-            }).catch(err => console.error('Error creating :.cname index:', err));
-
-            // Store original functions
-            const originalPut = pouchdb.put;
-            const originalGet = pouchdb.get;
-            const originalFind = pouchdb.find;
-
-            // Helper function to convert document to class instance
-            function docToInstance(doc) {
-                const metadata = doc[":"];
-                if (!doc || !metadata) return doc;
-
-                let prototype = pouchdb.classPrototypes[metadata.cname];
-
-                // If prototype not found in local registry, look in globalThis
-                if (!prototype && globalThis[metadata.cname]) {
-                    prototype = globalThis[metadata.cname].prototype;
-                    // Cache the prototype for future use
-                    pouchdb.classPrototypes[metadata.cname] = prototype;
-                }
-
-                if (!prototype) return doc;
-
-                // Create new object with the prototype and copy document properties
-                const instance = Object.create(prototype);
-                Object.assign(instance, doc);
-                Object.defineProperty(instance, ':', { enumerable:false,configirable:false,writable: true,value: metadata  });
-                return instance;
-            }
-
-            // Override put function
-            pouchdb.put = async function(doc, options = {}) {
-                const liveObject = options.liveObject ?? this.liveObjects;
-
-                if (liveObject && doc && typeof doc === 'object') {
-                    const constructorName = doc.constructor.name;
-                    if (constructorName !== 'Object') {
-                        const metadata = doc[":"]||{},
-                            proto = Object.getPrototypeOf(doc);
-                        metadata.cname = constructorName;
-                        doc = { ...doc };
-                        doc[":"] = metadata;
-                        // Store prototype if not already stored
-                        if (!this.classPrototypes[constructorName]) {
-                            this.classPrototypes[constructorName] = proto;
-                        }
-                    }
-                }
-
-                return originalPut.call(this, doc, options);
-            };
-
-            // Override get function
-            pouchdb.get = async function(docId, options = {}) {
-                const liveObject = options.liveObject ?? this.liveObjects;
-                const doc = await originalGet.call(this, docId, options);
-
-                if (liveObject) {
-                    return docToInstance(doc);
-                }
-
-                return doc;
-            };
-
-            // Override find function
-            pouchdb.find = async function(request = {}) {
-                const liveObject = request.liveObject ?? this.liveObjects;
-                const result = await originalFind.call(this, request);
-
-                if (liveObject && result.docs) {
-                    result.docs = result.docs.map(doc => docToInstance(doc));
-                }
-
-                return result;
-            };
-
-            return pouchdb;
-        }
     }
 
     // Export both as default and named
