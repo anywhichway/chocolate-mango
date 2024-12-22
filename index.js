@@ -1,3 +1,4 @@
+import {HangulEmbeddingEncoder} from "./src/hangul-embedding-encoder.js";
 
     const VALID_MANGO_OPERATORS = new Set([
         '$lt', '$lte', '$eq', '$ne', '$gte', '$gt',
@@ -686,17 +687,6 @@
 
 
     async function setupIndexes(db) {
-        // Create indexes for efficient querying
-        await db.createIndex({
-            index: {
-                fields: ['RAGcontent']
-            }
-        });
-        await db.createIndex({
-            index: {
-                fields: ['embedding']
-            }
-        });
         await db.createIndex({
             index: {
                 fields: ['contentHash']
@@ -800,83 +790,112 @@
         return chunks;
     }
 
-    // Search for similar documents using cosine similarity
-    async function searchVectorContent(query, {limit = 5,maxLength=5000,strategy="share"} = {}) {
-        const queryEmbedding = this.createEmbedding(query);
-        const allDocs = await this.allDocs({
-            include_docs: true
-        });
-        const hashes = new Set();
-        let results = await allDocs.rows
-            .reduce(async (results,row) => {
-                const similarity = this.calculateSimilarity(queryEmbedding, row.doc.embedding);
-                if(hashes.has(row.doc.contentHash)) {
-                    this.db.remove(row.doc);
-                    return results;
-                }
-                if(similarity===0 || !row.doc.contentHash) {
-                    return results;
-                }
-                results = await results;
-                hashes.add(row.doc.contentHash);
-                results.push({
-                    doc: row.doc,
-                    similarity
-                });
-                return results;
-            },[]);
-        results = results.sort((a, b) => b.similarity - a.similarity)
-            .slice(0, limit);
-        if(maxLength) {
-            // based on strategy reduce the response size
-            if(strategy==="first") {
-                // remove records after total of content length > maxLength, and truncate content on last record if necessary
-                let totalLength = 0;
-                for(let i=0;i<results.length;i++) {
-                    totalLength += results[i].doc.RAGcontent.length;
-                    if(totalLength>maxLength) {
-                        results = results.slice(0,i);
-                        break;
-                    }
-                }
-                if(results.length) {
-                    const last = results[results.length-1];
-                    if(totalLength>maxLength) {
-                        last.doc.content = last.doc.RAGcontent.slice(0,maxLength-totalLength);
-                    }
-                }
-            } else if(strategy==="share") {
-                // strategy=share
-                // return all records but truncate the content of each record so that the total length is less than maxLength by giving each an equal share of the total length
-                let totalLength = 0;
-                for(let i=0;i<results.length;i++) {
-                    totalLength += results[i].doc.RAGcontent.length;
-                }
-                const share = maxLength/results.length;
-                for(let i=0;i<results.length;i++) {
-                    const doc = results[i].doc;
-                    doc.content = doc.RAGcontent.slice(0,Math.min(doc.RAGcontent.length,share));
-                }
-            } else if(strategy==="last") {
-                // remove records before total of content length > maxLength, and truncate content on first record if necessary
-                let totalLength = 0;
-                for(let i=results.length-1;i>=0;i--) {
-                    totalLength += results[i].doc.RAGcontent.length;
-                    if(totalLength>maxLength) {
-                        results = results.slice(i);
-                        break;
-                    }
-                }
-                if(results.length) {
-                    const first = results[0];
-                    if(totalLength>maxLength) {
-                        first.doc.RAGcontent = first.doc.RAGcontent.slice(0,maxLength-totalLength);
-                    }
-                }
-            }
+async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy = "share"} = {}) {
+    // Create query embedding
+    const queryEmbedding = this.createEmbedding(query);
+
+    // Use the RAGcontent index to get documents efficiently
+    const result = await this.find({
+        selector: {
+            RAGcontent: {$exists: true}
+        },
+        fields: ['_id', '_rev', 'RAGcontent', 'embedding', 'contentHash']
+    });
+
+    // Process results efficiently using Set for deduplication
+    const hashes = new Set();
+    const results = [];
+
+    for (const doc of result.docs) {
+        // Skip duplicates
+        if (hashes.has(doc.contentHash)) {
+            await this.remove(doc);
+            continue;
         }
-        return results;
+
+        // Calculate similarity
+        const similarity = this.calculateSimilarity(queryEmbedding, doc.embedding, query.length,doc.RAGcontent.length);
+        if (similarity === 0 || !doc.contentHash) {
+            continue;
+        }
+
+        // Add to results and track hash
+        hashes.add(doc.contentHash);
+        results.push({
+            doc,
+            query,
+            similarity
+        });
     }
+
+    // Sort by similarity and limit results
+    let sortedResults = results;
+    if (!["first", "last"].includes(strategy)) {
+        sortedResults = results.sort((a, b) => b.similarity - a.similarity)
+            .slice(0, limit);
+    } else {
+        // sort based on timestamp oldest first
+        sortedResults = results.sort((a, b) => a.doc.timestamp - b.doc.timestamp);
+    }
+
+
+    // Handle maxLength restriction based on strategy
+    if (maxLength) {
+        if (strategy === "first") {
+            let totalLength = 0;
+            const finalResults = [];
+
+            for (const result of sortedResults) {
+                const newLength = totalLength + result.doc.RAGcontent.length;
+                if (newLength > maxLength) {
+                    if (finalResults.length > 0) {
+                        const lastResult = finalResults[finalResults.length - 1];
+                        const overflow = totalLength - maxLength;
+                        if (overflow > 0) {
+                            lastResult.doc.RAGcontent = lastResult.doc.RAGcontent.slice(0, -overflow);
+                        }
+                    }
+                    break;
+                }
+                finalResults.push(result);
+                totalLength = newLength;
+            }
+            return finalResults;
+
+        } else if (strategy === "share") {
+            const share = Math.floor(maxLength / sortedResults.length);
+            return sortedResults.map(result => ({
+                ...result,
+                doc: {
+                    ...result.doc,
+                    RAGcontent: result.doc.RAGcontent.slice(0, share)
+                }
+            }));
+
+        } else if (strategy === "last") {
+            let totalLength = 0;
+            const finalResults = [];
+
+            for (let i = sortedResults.length - 1; i >= 0; i--) {
+                const result = sortedResults[i];
+                const newLength = totalLength + result.doc.RAGcontent.length;
+                if (newLength > maxLength) {
+                    if (finalResults.length > 0) {
+                        const firstResult = finalResults[0];
+                        const overflow = totalLength - maxLength;
+                        if (overflow > 0) {
+                            firstResult.doc.RAGcontent = firstResult.doc.RAGcontent.slice(overflow);
+                        }
+                    }
+                    break;
+                }
+                finalResults.unshift(result);
+                totalLength = newLength;
+            }
+            return finalResults;
+        }
+    }
+}
 
     // Clear all documents
     async function clearAll() {
@@ -963,8 +982,7 @@
                         return true;
                     });
             }
-        } else if (startDate || endDate) {
-            // Date-only search for vectors
+        } else  {
             const selector = {
                 RAGcontent: { $exists: true },
                 timestamp: {}
@@ -980,9 +998,6 @@
                 fields: ['_id', '_rev']
             });
             docsToRemove = result.docs;
-        } else {
-            // No criteria - return empty array
-            docsToRemove = [];
         }
 
         // Get total count before deletion
@@ -1065,6 +1080,7 @@
                 if (constructorName !== 'Object') {
                     const metadata = doc[":"]||{},
                         proto = Object.getPrototypeOf(doc);
+                    Object.assign(metadata, options.metadata);
                     metadata.cname = constructorName;
                     doc = { ...doc };
                     doc[":"] = metadata;
@@ -1077,14 +1093,37 @@
 
             return originalPut.call(this, doc, options);
         };
-
+        let PUTS = [];
         // Override get function
         pouchdb.get = async function(docId, options = {}) {
             const liveObject = options.liveObject ?? this.liveObjects;
-            const doc = await originalGet.call(this, docId, options);
+            let doc = await originalGet.call(this, docId, options);
 
             if (liveObject) {
-                return docToInstance(doc);
+                doc = docToInstance(doc);
+                if(liveObject) {
+                    // wrap with a Proxy that will persist changes to the database
+                    // if persist === "deep" then all nested objects that are not Arrays or just plain Objects will also be wrapped with a Proxy
+                    // a parentId will be added to the metadata of child objects to track the parent object
+                    const persist = liveObject.persist;
+                    const parentId = doc._id;
+                    const handler = {
+                        set(target, prop, value) {
+                            target[prop] = value;
+                            if (persist && value && typeof value === "object" && ![Date,Set,Map,RegExp].some(cls => value instanceof cls)) {
+                                target[prop] = new Proxy(value, handler);
+                            }
+                            if(prop[0]!=="_") pouchdb.put(doc,{force:true,metadata:doc[":"]})
+                            return true;
+                        },
+                        deleteProperty(target, prop) {
+                            delete target[prop];
+                            if(prop[0]!=="_") pouchdb.put(doc,{force:true,metadata:doc[":"]})
+                            return true;
+                        }
+                    };
+                    doc = doc._id[0]==="_" ? doc : new Proxy(doc, handler);
+                }
             }
 
             return doc;
@@ -1232,13 +1271,26 @@
             return this;
         }
 
-        static dip(pouchdb, { vectors, liveObjects, triggers } = {}) {
+        static dip(pouchdb, { vectors, liveObjects, triggers, embeddingDimesionality=512, embeddingEncoder } = {}) {
+            setupIndexes(pouchdb);
             if(liveObjects) {
-                setupLiveObjects(pouchdb,liveObjects)
+                setupLiveObjects(pouchdb, liveObjects);
             }
             if(triggers) {
-                setupTriggers(pouchdb,triggers)
+                setupTriggers(pouchdb, triggers);
             }
+
+            // Store the embeddingEncoder instance on the database
+            if (vectors) {
+                pouchdb.embeddingEncoder = embeddingEncoder || new HangulEmbeddingEncoder(embeddingDimesionality);
+                // Create indexes for efficient querying
+                pouchdb.createIndex({
+                    index: {
+                        fields: ['RAGcontent']
+                    }
+                });
+            }
+
             const oldFind = pouchdb.find;
 
             async function find(request) {
@@ -1260,47 +1312,46 @@
             pouchdb.find = find;
 
             if (vectors) {
-                [generateHash, this.createEmbedding, putVectorContent, removeVectorContent,searchVectorContent, clearVectorContent, this.calculateSimilarity, clearAll, this.query, this.sort].forEach(value => {
-                    Object.defineProperty(pouchdb, value.name, {configurable:true,writable:false,value})
-                })
+                // Bind methods with the stored embeddingEncoder
+                const boundMethods = {
+                    generateHash,
+                    createEmbedding: (text) => ChocolateMango.createEmbedding(text, pouchdb.embeddingEncoder),
+                    putVectorContent,
+                    removeVectorContent,
+                    searchVectorContent,
+                    clearVectorContent,
+                    calculateSimilarity: (emb1, emb2,text1Length,text2Length) => ChocolateMango.calculateSimilarity(emb1, emb2,text1Length,text2Length,pouchdb.embeddingEncoder),
+                    clearAll,
+                    query: ChocolateMango.query,
+                    sort: ChocolateMango.sort
+                };
+
+                Object.entries(boundMethods).forEach(([name, value]) => {
+                    Object.defineProperty(pouchdb, name, {
+                        configurable: true,
+                        writable: false,
+                        value
+                    });
+                });
             }
 
             return pouchdb;
         }
 
-        // Create a simple embedding using term frequency
-        static createEmbedding(text) {
-            const words = text.toLowerCase().split(/\W+/);
-            const frequency = {};
-
-            for (let word of words) {
-                if (word) {
-                    frequency[word] = (frequency[word] || 0) + 1;
-                }
+        static createEmbedding(text, encoder = new HangulEmbeddingEncoder(512, false)) {
+            if (typeof text !== 'string') {
+                text = JSON.stringify(text);
             }
-
-            return frequency;
+            return encoder.createEmbedding(text);
         }
 
-        // Calculate cosine similarity between query and document embeddings
-        static calculateSimilarity(embedding1, embedding2={}) {
-            const keys = new Set([...Object.keys(embedding1), ...Object.keys(embedding2)]);
-            if(keys.size===0) return 1;
-            let dotProduct = 0;
-            let norm1 = 0;
-            let norm2 = 0;
-
-            for (let key of keys) {
-                const val1 = embedding1[key] || 0;
-                const val2 = embedding2[key] || 0;
-                dotProduct += val1 * val2;
-                norm1 += val1 * val1;
-                norm2 += val2 * val2;
+        static calculateSimilarity(embedding1, embedding2, text1Length, text2Length, encoder = new HangulEmbeddingEncoder(512, false)) {
+            // Handle old format or missing embeddings
+            if (!embedding1 || !embedding2) {
+                console.warn('Invalid embeddings provided');
+                return 0;
             }
-
-            const result = dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2) || 1);
-            if(result>=0.99999) return 1;
-            return result;
+            return encoder.computeSimilarity(embedding1, embedding2,  text1Length, text2Length);
         }
 
         static query(data, pattern, {property, object} = {},recursion=0) {

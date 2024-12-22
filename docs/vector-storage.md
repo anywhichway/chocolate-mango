@@ -2,6 +2,9 @@
 
 ChocolateMango provides vector storage capabilities for similarity search and content retrieval. This document details the vector storage features and their usage.
 
+The embeddings technology is based on phonetic encoding, allowing for similarity calculations across many languages. It is also designed to be smaller
+and more efficient than traditional word embeddings in oder to be used in a browser environment. See the [Hangul Phonetic Embeddings for Efficient Language Model Retrieval](./paper.md). 
+
 ## Enabling Vector Storage
 
 Enable vector storage when initializing ChocolateMango:
@@ -60,7 +63,7 @@ Parameters:
 ### Content Truncation Strategies
 
 #### "first" Strategy
-Returns documents from the beginning until reaching the maxLength limit:
+Returns documents sorted by match similarity high to low from the beginning until reaching the `maxLength` limit:
 ```javascript
 const results = await db.searchVectorContent("query", {
   maxLength: 1000,
@@ -85,7 +88,7 @@ Example behavior with maxLength of 1000:
 ```
 
 #### "share" Strategy (default)
-Distributes maxLength evenly across all matching documents:
+Distributes `maxLength` evenly across all matching documents sorted by date of vector creation:
 ```javascript
 const results = await db.searchVectorContent("query", {
   maxLength: 1000,
@@ -110,7 +113,7 @@ Example behavior with maxLength of 1000:
 ```
 
 #### "last" Strategy
-Returns documents from the end, prioritizing most recent matches:
+Returns documents sorted by match similarity low to high from the beginning until reaching the `maxLength` limit:
 ```javascript
 const results = await db.searchVectorContent("query", {
   maxLength: 1000,
@@ -209,19 +212,41 @@ Each vector document contains:
 
 ## Content Processing
 
-### Automatic Chunking
-Content is automatically split into manageable chunks using natural sentence boundaries:
-
-```javascript
-const chunks = await db.chunkContent(content, maxChunkSize);
-```
-
 ### Embeddings
-Term frequency vectors are generated automatically:
+Term frequency vectors are generated automatically based on a phonetic encoding.
 
 ```javascript
 const embedding = db.createEmbedding(text);
 ```
+
+The vocabulary size is 11,172 tokens.
+
+You can set the embedding dimensionality when initializing ChocolateMango:
+
+64: Minimum viable size
+- Can encode basic Hangul structure (19 initial + 21 medial + 28 final = ~15 bits)
+- One CPU word, efficient but limited discrimination
+
+128: Good minimum for production
+- Better phonetic discrimination
+- Two CPU words, still very efficient
+
+256: Strong balance
+- 32 bytes = 8 x 32-bit words
+- Great for SIMD operations
+- Good separation of similar phonetics
+
+512: Optimal for modern hardware (default)
+- Exactly one CPU cache line (64 bytes)
+- Perfect for AVX-512 instructions
+- Optimal hardware acceleration
+- Best discrimination/performance balance
+
+1024: Maximum practical size
+- Diminishing returns vs computational cost
+- Two cache lines, still efficient but overkill
+
+You can also pass your own encoder that supports `createEmbedding(text)` and `computeSimilarity(embedding1, embedding2)`.
 
 ### Content Hashing
 SHA-256 hashing is used for deduplication:
@@ -283,34 +308,8 @@ const results = await db.searchVectorContent(query, {
 await db.removeVectorContent(oldContent);
 ```
 
-## Best Practices
-
-1. Content Management
-    - Use appropriate chunk sizes based on your use case
-    - Consider memory implications when setting maxLength
-    - Include relevant metadata for better organization
-
-2. Search Optimization
-    - Choose appropriate strategies based on content type
-    - Set reasonable limits for result sets
-    - Use metadata to filter results when possible
-
-3. Performance Considerations
-    - Implement regular cleanup of outdated content
-    - Monitor storage usage and implement retention policies
-    - Consider indexing frequently accessed fields
-
 ## Limitations
 
-- Uses simple term frequency embeddings
+- Uses simple phonetic frequency embeddings, usable across many languages
 - Limited to text content
-- Basic chunking based on sentence boundaries
-- No support for external embedding models
 - In-memory similarity calculations
-
-## Notes
-
-- All vector operations are synchronous except for storage operations
-- Content hashing ensures deduplication
-- Embeddings are generated at storage time
-- Similarity scores range from 0 to 1
