@@ -3,7 +3,7 @@
 ChocolateMango provides vector storage capabilities for similarity search and content retrieval. This document details the vector storage features and their usage.
 
 The embeddings technology is based on phonetic encoding, allowing for similarity calculations across many languages. It is also designed to be smaller
-and more efficient than traditional word embeddings in oder to be used in a browser environment. See the [Hangul Phonetic Embeddings for Efficient Language Model Retrieval](./paper.md). 
+and more efficient than traditional word embeddings in oder to be used in a browser environment.
 
 ## Enabling Vector Storage
 
