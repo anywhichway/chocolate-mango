@@ -1364,7 +1364,7 @@ async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy
                 for (const key in expandedPattern) {
                     if (predicates[key]) {
                         const predicate = predicates[key];
-                        result = predicate.call(predicates,value, expandedPattern[key], {transform: key, property, object});
+                        result = predicate.call(predicates,value, expandedPattern[key], {predicate: key, property, object});
                         if(argLength(predicate)===1 && !expandedPattern[key] && result!==undefined) return results;
                     } else if (transforms[key]) {
                         result = transforms[key](value, expandedPattern[key], {transform: key, property, object});
