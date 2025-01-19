@@ -1,5 +1,221 @@
-
+import PouchDB from 'pouchdb';
+import memoryAdapter from 'pouchdb-adapter-memory';
+import PouchDBFind from 'pouchdb-find'; // Import pouchdb-find
 import { ChocolateMango } from './index.js';
+
+// Register the memory adapter
+PouchDB.plugin(memoryAdapter);
+PouchDB.plugin(PouchDBFind);
+
+// Define the User class with base and nested properties
+class User {
+    constructor(config={}) {
+        Object.assign(this,config)
+    }
+
+    greet() {
+        return `Hello, my name is ${this.name}!`;
+    }
+}
+
+describe('ChocolateMango Serialization, Deserialization, and LiveObjects', () => {
+
+    // Helper function to create a test database with liveObjects enabled
+    async function createTestDatabase() {
+        const db = new PouchDB('testdb');
+        return ChocolateMango.dip(db, { liveObjects: true });
+    }
+
+    // Test serialization and deserialization
+    describe('Serialization and Deserialization', () => {
+        test('toSerializable should handle basic types', async () => {
+            const data = {
+                string: 'test',
+                number: 42,
+                boolean: true,
+                null: null,
+                undefined: undefined,
+                array: [1, 2, 3],
+                object: { key: 'value' }
+            };
+
+            const serialized = await ChocolateMango.toSerializable(data);
+            expect(serialized).toEqual({
+                string: 'test',
+                number: 42,
+                boolean: true,
+                null: null,
+                array: [1, 2, 3],
+                object: { key: 'value' }
+            });
+        });
+
+        test('toSerializable should handle special cases (NaN, Infinity)', async () => {
+            const data = {
+                nan: NaN,
+                infinity: Infinity,
+                negativeInfinity: -Infinity
+            };
+
+            const serialized = await ChocolateMango.toSerializable(data);
+            expect(serialized).toEqual({
+                nan: '#NaN',
+                infinity: '#Infinity',
+                negativeInfinity: '-#Infinity'
+            });
+        });
+
+        test('deserialize should restore special cases (NaN, Infinity)', () => {
+            const data = {
+                nan: '#NaN',
+                infinity: '#Infinity',
+                negativeInfinity: '-#Infinity'
+            };
+
+            const deserialized = ChocolateMango.deserialize(data);
+            expect(deserialized).toEqual({
+                nan: NaN,
+                infinity: Infinity,
+                negativeInfinity: -Infinity
+            });
+        });
+
+        test('toSerializable should handle nested objects and arrays', async () => {
+            const data = {
+                nestedObject: { key: 'value', nested: { num: 42 } },
+                nestedArray: [1, [2, 3], { key: 'value' }]
+            };
+
+            const serialized = await ChocolateMango.toSerializable(data);
+            expect(serialized).toEqual({
+                nestedObject: { key: 'value', nested: { num: 42 } },
+                nestedArray: [1, [2, 3], { key: 'value' }]
+            });
+        });
+
+        test('deserialize should restore nested objects and arrays', async () => {
+            const data = {
+                nestedObject: { key: 'value', nested: { num: 42 } },
+                nestedArray: [1, [2, 3], { key: 'value' }]
+            };
+
+            const serialized = await ChocolateMango.toSerializable(data);
+            const deserialized = ChocolateMango.deserialize(serialized);
+            expect(deserialized).toEqual(data);
+        });
+    });
+
+    // Test liveObjects functionality
+    describe('LiveObjects with User Class', () => {
+        let db;
+
+        beforeAll(async () => {
+            db = await createTestDatabase();
+        });
+
+        afterAll(async () => {
+            await db.destroy();
+        });
+
+        test('should store and retrieve a User instance with _id', async () => {
+            const user = new User({
+                name: 'John Doe',
+                age: 30,
+                address: { city: 'New York', zip: '10001' },
+                preferences: ['reading', 'traveling'],
+                metadata: { createdAt: new Date(), isActive: true },
+                _id: "user1"
+            });
+
+            // Store the user with a custom _id
+            const result = await db.put(user);
+            expect(result.ok).toBe(true);
+
+            // Retrieve the user and verify it's an instance of User
+            const retrievedUser = await db.get('user1');
+            expect(retrievedUser).toBeInstanceOf(User);
+            expect(retrievedUser.name).toBe('John Doe');
+            expect(retrievedUser.age).toBe(30);
+            expect(retrievedUser.address.city).toBe('New York');
+            expect(retrievedUser.preferences).toEqual(['reading', 'traveling']);
+            expect(retrievedUser.metadata.isActive).toBe(true);
+            expect(retrievedUser.greet()).toBe('Hello, my name is John Doe!');
+        });
+
+        test('should store and retrieve a User instance without _id', async () => {
+            const user = new User({
+                name: 'Jane Doe',
+                age: 25,
+                address: { city: 'Los Angeles', zip: '90001' },
+                preferences: ['hiking', 'photography'],
+                metadata: { createdAt: new Date(), isActive: false }
+            });
+
+            // Store the user without a custom _id
+            const result = await db.put(user);
+            expect(result.ok).toBe(true);
+
+            // Retrieve the user using the generated _id
+            const retrievedUser = await db.get(result.id);
+            expect(retrievedUser).toBeInstanceOf(User);
+            expect(retrievedUser.name).toBe('Jane Doe');
+            expect(retrievedUser.age).toBe(25);
+            expect(retrievedUser.address.city).toBe('Los Angeles');
+            expect(retrievedUser.preferences).toEqual(['hiking', 'photography']);
+            expect(retrievedUser.metadata.isActive).toBe(false);
+            expect(retrievedUser.greet()).toBe('Hello, my name is Jane Doe!');
+        });
+
+        test('should update nested properties of a User instance', async () => {
+            const user = new User({
+                name: 'Alice',
+                age: 28,
+                address: { city: 'San Francisco', zip: '94105' },
+                preferences: ['coding', 'music'],
+                metadata: { createdAt: new Date(), isActive: true },
+                _id: "user2"
+            });
+
+            // Store the user
+            const result = await db.put(user);
+            expect(result.ok).toBe(true);
+
+            // Retrieve and update the user
+            const retrievedUser = await db.get('user2');
+            retrievedUser.address.city = 'Seattle';
+            retrievedUser.preferences.push('gaming');
+
+            // Save the updated user
+            const updateResult = await db.put(retrievedUser);
+            expect(updateResult.ok).toBe(true);
+
+            // Verify the updates
+            const updatedUser = await db.get('user2');
+            expect(updatedUser.address.city).toBe('Seattle');
+            expect(updatedUser.preferences).toEqual(['coding', 'music', 'gaming']);
+        });
+
+        test('should handle nested objects and arrays in User class', async () => {
+            const user = new User({
+                name: 'Bob',
+                age: 35,
+                address: { city: 'Chicago', zip: '60601' },
+                preferences: ['sports', 'cooking'],
+                metadata: { createdAt: new Date(), isActive: true, nested: { key: 'value' } },
+                _id: 'user3'
+            });
+
+            // Store the user
+            const result = await db.put(user);
+            expect(result.ok).toBe(true);
+
+            // Retrieve and verify nested properties
+            const retrievedUser = await db.get(result.id);
+            expect(retrievedUser.address.city).toBe('Chicago');
+            expect(retrievedUser.metadata.nested.key).toBe('value');
+        });
+    });
+});
 
 describe('ChocolateMango Predicates & Transforms', () => {
     // Helper function to run queries
@@ -864,8 +1080,6 @@ describe('ChocolateMango Predicates & Transforms', () => {
         });
 
         describe('Embeddings and Similarity', () => {
-
-
             test('calculates similarity between embeddings', () => {
                 const text1 = 'hello world test';
                 const text2 = 'hello world other';

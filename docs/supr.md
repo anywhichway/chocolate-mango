@@ -21,18 +21,18 @@ learners who need a practical system for digital phonetic notation in either a L
 
 We hope you find it useful.
 
-- {lang:eng} > wi: h[ou]p ju: f[ai]nd [i]t ju:s·f[u]l
+- {lang:eng} > wi: h[ou]p ju: f[ai]nd [i]t ju:s.f[u]l
 - {lang:الإنجليزية} > وي هوب يو فايند إت يوسفُل
 - {lang:영어} > 위 호우프 유 파인드 잇 유스풀
 
 "نأمل أن تجده مفيد
 
-- {lang:العربية} > n[a]'·m[a]l [a]n t[a]·[dj]i·d[a]·hu mu·f[i]·d[a]n >>
+- {lang:العربية} > n[a]'.m[a]l [a]n t[a].[dj]i.d[a].hu mu.f[i].d[a]n >>
 - {lang:아랍어} > 나으말 안 타지다후 무피단
 
 유용하게 찾으시길 바랍니다
 
-- {lang:한국어} > yu·yong·h[a]·ge ch[a]·d[u]·shi·gil ba·r[a]·mn[i]·da
+- {lang:한국어} > yu.yong.h[a].ge ch[a].d[u].shi.gil ba.r[a].mn[i].da
 - {lang:الكورية} > يُيونغهاجي تشاجُوسيجيل بارامنيدا
 
 ## 1.2 Core Design Principles
@@ -80,7 +80,7 @@ Complex cluster: str
 Vowel combinations: [oe], [ue], [ae]
 
 Boundaries
-Syllable: · (middle dot)
+Syllable: . (middle dot)
 Morpheme: -
 Word: space
 Phrase: > (LTR), < (RTL)
@@ -135,7 +135,7 @@ Guidelines for Language Code Markers:
 
 Airport Baggage Claim Sign (English-Arabic-Hebrew)
 Original: "Baggage Claim استلام الأمتعة קבלת מטען Terminal 3"
-Transcription: {lang:eng} > b[ae]·g[i][dj] kl[ei]m > {lang:ara} [i]s·ti·l[aa]m < [a]l·[a]m·ti·[a] << {lang:heb} ka·ba·l[a]t < me·t[a]·[a]n > {lang:eng} t[er]·mi·n[a]l > [th]ri:
+Transcription: {lang:eng} > b[ae].g[i][dj] kl[ei]m > {lang:ara} [i]s.ti.l[aa]m < [a]l.[a]m.ti.[a] << {lang:heb} ka.ba.l[a]t < me.t[a].[a]n > {lang:eng} t[er].mi.n[a]l > [th]ri:
 
 # 3. System Variants
 ## 3.1 Basic Version
@@ -185,9 +185,9 @@ Provide reversible mapping to standard format
 Example
 English: "supermarket"
 Standard Version:
-> [sh][ue]·p[er]·m[aa]·k[et]
+> [sh][ue].p[er].m[aa].k[et]
 Compressed Version:
-> ʃy·pər·mɑ·kət
+> ʃy.pər.mɑ.kət
 
 # 4. Modification System
 ## 4.1 Basic Modifiers
@@ -259,7 +259,7 @@ Special grouping [] ()
 Tone markers (^ - _) [Enhanced Version]
 
 Alt Layer:
-Middle dot (·)
+Middle dot (.)
 Special characters
 
 # 6. Sample Transcriptions
@@ -267,12 +267,12 @@ Examples Using New Phonemes
 
 Arabic (Enhanced Version with Uvulars)
 Original: "قال" (said)
-Transcription: q[aa]·l[a] >
+Transcription: q[aa].l[a] >
 Note: Shows uvular stop [q]
 
 Hausa (Basic Version with Implosives)
 Original: "ɓaƙi" (black)
-Transcription: b'a·[qh]i >
+Transcription: b'a.[qh]i >
 Note: Shows bilabial implosive [b']
 
 Turkish (Basic Version with Unrounded Vowel)
@@ -282,7 +282,7 @@ Note: Shows unrounded high back vowel [uh]
 
 Amharic (Enhanced Version with Glottal Stop)
 Original: "ስዕል" (picture)
-Transcription: s[ih][']·[ih]l >
+Transcription: s[ih]['].[ih]l >
 Note: Shows glottal stop [']
 
 Standard Examples
@@ -291,19 +291,19 @@ Left-to-Right (LTR) Examples
 
 English (Basic Version)
 Original: "The quick brown fox jumps over the lazy dog."
-Transcription: > the kw[i]k br[au]n f[o]ks > [dj][u]mps ou·v[er] > the lei·zi d[o]g
+Transcription: > the kw[i]k br[au]n f[o]ks > [dj][u]mps ou.v[er] > the lei.zi d[o]g
 
 French (Basic Version)
 Original: "Le petit chat mange du poisson."
-Transcription: > l[uh] p[uh]·ti [sh]a > m[on]:[zh] dy > pw[a]·s[on]
+Transcription: > l[uh] p[uh].ti [sh]a > m[on]:[zh] dy > pw[a].s[on]
 
 German (Basic Version)
 Original: "Ich möchte einen Kaffee, bitte."
-Transcription: > [i]k m[oe]k·t[uh] > [ai]·n[uh]n ka·fe: > bi·t[uh]
+Transcription: > [i]k m[oe]k.t[uh] > [ai].n[uh]n ka.fe: > bi.t[uh]
 
 Mandarin (Enhanced Version)
 Original: "我喜欢喝绿茶"
-Transcription: > w[o]^ [sh]i_^·h[ua]n^ > h[e]^ l[ue]^_·[ch]a^
+Transcription: > w[o]^ [sh]i_^.h[ua]n^ > h[e]^ l[ue]^_.[ch]a^
 Note: Shows rising (^), falling (^), and level (^) tones
 
 Vietnamese (Enhanced Version)
@@ -315,32 +315,32 @@ Right-to-Left (RTL) Examples
 
 Arabic (Enhanced Version)
 Original: "السلام عليكم"
-Transcription: [a]s·sa·l[aa]m' < [a]·lei'·kum <<
+Transcription: [a]s.sa.l[aa]m' < [a].lei'.kum <<
 Note: Shows primary stress marking
 
 Hebrew (Basic Version)
 Original: "שלום וברכה"
-Transcription: [sh]a·l[o]m < ve·bra·[ch]a <<
+Transcription: [sh]a.l[o]m < ve.bra.[ch]a <<
 
 Persian (Enhanced Version)
 Original: "خوش آمدید"
-Transcription: [ch][o][sh] < [aa]'·ma·d[i]d <<
+Transcription: [ch][o][sh] < [aa]'.ma.d[i]d <<
 Note: Shows stress patterns
 
 Urdu (Enhanced Version)
 Original: "آپ کیسے ہیں"
-Transcription: [aa]p^_ < k[ei]^-·s[e] < h[ei]n^-_ <<
+Transcription: [aa]p^_ < k[ei]^-.s[e] < h[ei]n^-_ <<
 Note: Shows complex pitch accent patterns
 
 Mixed Direction Examples
 
 Business Meeting Schedule (English-Arabic)
 Original: "Team Meeting الاجتماع القادم: Room 305, 2:30 PM - Project Review مراجعة تحديث API والتقرير الفني"
-Transcription: > ti:m mi:·t[i]ng [a]l·[i][dj]·ti·m[aa] < [a]l·q[aa]·dim >> > ru:m > tri: z[i]·r[ou] f[ai]v > tu: t[er]·ti: pi:·[e]m > - pr[o]·[dj][e]kt ri·vju: mu·r[aa]·[dj]a·[a]t < t[a]h·d[i]th >> > ei: pi: [ai] w[a]·[a]t·t[a]q·r[i]r < [a]l·f[a]·n[i] <<
+Transcription: > ti:m mi:.t[i]ng [a]l.[i][dj].ti.m[aa] < [a]l.q[aa].dim >> > ru:m > tri: z[i].r[ou] f[ai]v > tu: t[er].ti: pi:.[e]m > - pr[o].[dj][e]kt ri.vju: mu.r[aa].[dj]a.[a]t < t[a]h.d[i]th >> > ei: pi: [ai] w[a].[a]t.t[a]q.r[i]r < [a]l.f[a].n[i] <<
 
 Airport Baggage Claim Sign (English-Arabic-Hebrew)
 Original: "Baggage Claim استلام الأمتعة קבלת מטען Terminal 3"
-Transcription: > b[ae]·g[i][dj] kl[ei]m [i]s·ti·l[aa]m < [a]l·[a]m·ti·[a] << ka·ba·l[a]t < me·t[a]·[a]n > t[er]·mi·n[a]l > tri:
+Transcription: > b[ae].g[i][dj] kl[ei]m [i]s.ti.l[aa]m < [a]l.[a]m.ti.[a] << ka.ba.l[a]t < me.t[a].[a]n > t[er].mi.n[a]l > tri:
 
 # 7. Reader-Native Expression
 
@@ -351,7 +351,7 @@ The System for Uniform Phonetic Representation (SUPR) supports expressing phonet
 When expressing SUPR in a reader's native script, the following elements must be preserved:
 
 Structural Markers:
-- Syllable boundaries (·)
+- Syllable boundaries (.)
 - Morpheme boundaries (-)
 - Directional markers (>, <)
 - Sentence markers (>>, <<)
@@ -367,7 +367,7 @@ Language Context:
 Airport Sign in Multiple Scripts:
 
 Original SUPR:
-{lang:eng} > b[ae]cg[i][dj] kl[ei]m > {lang:ara} [i]s·ti·l[aa]m < [a]l·[a]m·ti·[a] << {lang:heb} ka·ba·l[a]t < me·t[a]·[a]n > {lang:eng} t[er]·mi·n[a]l > [th]ri:
+{lang:eng} > b[ae]cg[i][dj] kl[ei]m > {lang:ara} [i]s.ti.l[aa]m < [a]l.[a]m.ti.[a] << {lang:heb} ka.ba.l[a]t < me.t[a].[a]n > {lang:eng} t[er].mi.n[a]l > [th]ri:
 
 Arabic:
 {lang:الإنجليزية} > بَاجِد كليم > {lang:العربية} إِستيلام < المَتيا << {lang:עברית} كابالات < ميتان > {lang:الإنجليزية} ترمينال > ثري
@@ -462,34 +462,34 @@ Since the initial impetus for SUPR was to provide a system for phonetic indexing
 ### 9.2.1 Russian
 - Stress position changes lexical meaning
 - Example: замок (castle) vs замок (lock)
-  - SUPR: z[a]'·m[o]k vs z[a]·m[o]'k
+  - SUPR: z[a]'.m[o]k vs z[a].m[o]'k
 - Stress shifts in declension preserving core meanings
 
 ### 9.2.2 English
 - Noun-verb pairs distinguished by stress
 - Example: "permit" (n) vs "permit" (v)
-  - SUPR: p[er]'·m[i]t vs p[er]·m[i]'t
+  - SUPR: p[er]'.m[i]t vs p[er].m[i]'t
 - Compound stress patterns indicating relationship type
   - "greenhouse" vs "green house"
-  - SUPR: gri:n'·h[au]s vs gri:n > h[au]s'
+  - SUPR: gri:n'.h[au]s vs gri:n > h[au]s'
 
 ## 9.3 Length and Gemination
 
 ### 9.3.1 Japanese
 - Phonemic length affecting meaning
 - Example: obasan (aunt) vs obaasan (grandmother)
-  - SUPR: [o]·ba·s[a]n vs [o]·ba:·s[a]n
+  - SUPR: [o].ba.s[a]n vs [o].ba:.s[a]n
 - Gemination distinctions
   - kite (come) vs kitte (stamp)
-  - SUPR: ki·te vs ki·t:e
+  - SUPR: ki.te vs ki.t:e
 
 ### 9.3.2 Arabic
 - Root meaning preservation through consonant length
 - Example: kataba (wrote) vs kattaba (caused to write)
-  - SUPR: ka·ta·ba vs ka·t:a·ba
+  - SUPR: ka.ta.ba vs ka.t:a.ba
 - Vowel length semantic distinctions
   - kitāb (book) vs kutub (books)
-  - SUPR: ki·t[aa]b vs ku·tub
+  - SUPR: ki.t[aa]b vs ku.tub
 
 ## 9.4 Glottalization and Phonation
 
@@ -680,7 +680,7 @@ Vowels:
 - و → u:
 
 Example: مُسْتَشْفَى (hospital)
-Transcription: mus·t[a][sh]·f[aa] >
+Transcription: mus.t[a][sh].f[aa] >
 Features: Shows cluster handling, long vowel, and RTL
 
 #### Amharic
@@ -715,7 +715,7 @@ Vowels:
 - o → o
 
 Example: ጽድቅተኛ (righteous)
-Transcription: [ts']'[uh]d·q[uh]·t[eh]·[nj]a >
+Transcription: [ts']'[uh]d.q[uh].t[eh].[nj]a >
 Features: Shows ejective consonant, schwa vowel, and palatalization
 
 ### C.2 Niger-Congo Languages
@@ -746,7 +746,7 @@ Vowels:
 - û → [uu]
 
 Example: ɗauɗàwā (stealing repeatedly)
-Transcription: d'au·d'[aa]·w[aa]_ >
+Transcription: d'au.d'[aa].w[aa]_ >
 Features: Shows implosive, diphthong, and tone marking
 
 #### Yoruba
@@ -766,7 +766,7 @@ Vowels:
 - ọ → [ao]
 
 Example: gbọ̀ọ́gbàá (garden egg)
-Transcription: [gb][ao]_·[ao]^·[gb][aa]^ >
+Transcription: [gb][ao]_.[ao]^.[gb][aa]^ >
 Features: Shows labial-velar stop, vowel quality, and tonal contrast
 
 ### C.3 Turkic Languages
@@ -791,7 +791,7 @@ Vowels:
 - u → u
 
 Example: güzelleştirmek (to beautify)
-Transcription: g[ue]·z[eh]l·l[eh][sh]·t[ih]r·m[eh]k >
+Transcription: g[ue].z[eh]l.l[eh][sh].t[ih]r.m[eh]k >
 Features: Shows vowel harmony, palatalization, and suffix stacking
 
 #### Kazakh
@@ -809,7 +809,7 @@ Vowels:
 - ү → [ue]
 
 Example: құрметтеу (to respect)
-Transcription: q[uh]r·m[eh]t·t[eh]u >
+Transcription: q[uh]r.m[eh]t.t[eh]u >
 Features: Shows uvular consonant, unrounded vowel, and gemination
 
 ### C.4 Sino-Tibetan Languages
@@ -856,7 +856,7 @@ Finals:
 - oeng → [ong]
 
 Example: 講嘢 (góng yéh - to speak)
-Transcription: g[ao]ng-^ j[eh]^·[eh] >
+Transcription: g[ao]ng-^ j[eh]^.[eh] >
 Features: Shows complex finals and changed tone
 
 ### C.5 Japonic Languages
@@ -885,12 +885,12 @@ Special Cases:
 - ゑ/ヱ → [we]
 
 Pitch Accent:
-- High start → [ka]^ta·na
-- High end → ka·ta^·na
-- Mid drop → ka·ta^·na_
+- High start → [ka]^ta.na
+- High end → ka.ta^.na
+- Mid drop → ka.ta^.na_
 
 Example: 引っ張られる (hippareru - to be pulled)
-Transcription: h[ih]p·p[a]·r[a]·r[eh]·r[uh] >
+Transcription: h[ih]p.p[a].r[a].r[eh].r[uh] >
 Features: Shows gemination, pitch accent, and vowel devoicing
 
 ### C.6 Korean
@@ -927,7 +927,7 @@ Features: Shows gemination, pitch accent, and vowel devoicing
 - ㅟ → [wi]
 
 Example: 깨끗하다 (kkaekkeutada - clean)
-Transcription: k'[ae]·k'[uh]·t[uh]·ha·da >
+Transcription: k'[ae].k'[uh].t[uh].ha.da >
 Features: Shows aspirated consonants, vowel harmony, and compound structure
 
 ### C.7 Dravidian Languages
@@ -958,7 +958,7 @@ Vowels:
 - ஔ → [au]
 
 Example: பொற்றாமரை (poṟṟāmarai - golden lotus)
-Transcription: p[ao]r·r[aa]·ma·r[ai] >
+Transcription: p[ao]r.r[aa].ma.r[ai] >
 Features: Shows retroflex consonant, long vowel, and compound
 
 #### Telugu
@@ -1012,11 +1012,11 @@ Vowels:
 - ఔ → [au]
 
 Example: ప్రేమ (prema - love)
-Transcription: p[reh]·ma >
+Transcription: p[reh].ma >
 Features: Shows consonant cluster, vowel length distinction
 
 Example: తెలుగు (telugu - Telugu language)
-Transcription: t[eh]·lu·gu >
+Transcription: t[eh].lu.gu >
 Features: Shows dental stop, velar stop, short vowels
 
 #### Kannada
@@ -1069,11 +1069,11 @@ Vowels:
 - ಔ → [au]
 
 Example: ಪ್ರೀತಿ (prīti - love)
-Transcription: p[ri:]·ti >
+Transcription: p[ri:].ti >
 Features: Shows consonant cluster, long vowel
 
 Example: ಕನ್ನಡ (kannada - Kannada language)
-Transcription: kan·na·[d.a] >
+Transcription: kan.na.[d.a] >
 Features: Shows gemination, retroflex stop
 
 #### Malayalam
@@ -1128,11 +1128,11 @@ Vowels:
 
 Examples:
 1. സ്നേഹം (snēhaṁ - love)
-   - Transcription: s[neh]·ham >
+   - Transcription: s[neh].ham >
    - Features: Shows consonant cluster, vowel length, final nasalization
 
 2. മലയാളം (malayāḷaṁ - Malayalam language)
-   - Transcription: ma·la·y[aa]·[l.]am >
+   - Transcription: ma.la.y[aa].[l.]am >
    - Features: Shows retroflex lateral, long vowel, final nasalization
 
 ### Special Features Across Dravidian Languages
@@ -1140,7 +1140,7 @@ Examples:
 #### Retroflex Consonant Series
 - All major Dravidian languages distinguish dental and retroflex series
 - Retroflex notation uses [.] marker: [t.], [d.], [n.], [l.]
-- Example: Tamil நட (naṭa - walk) → na·[t.]a >
+- Example: Tamil நட (naṭa - walk) → na.[t.]a >
 
 #### Gemination
 - Distinctive feature across all Dravidian languages
@@ -1177,7 +1177,7 @@ Vowels:
 ó → o^
 
 Example: kjærlighet (love)
-Transcription: [ch][ae]r·li·h[eh]t >
+Transcription: [ch][ae]r.li.h[eh]t >
 Features: Shows palatal consonant, front vowel, and devoicing
 Danish
 Consonants:
@@ -1197,7 +1197,7 @@ y → [ue]
 ð → [dh]
 
 Example: kærlighed (love)
-Transcription: k[ae]r·li·h[eh][dh] >
+Transcription: k[ae]r.li.h[eh][dh] >
 Features: Shows soft d, front vowel, and consonant weakening
 Swedish
 Consonants:
@@ -1217,7 +1217,7 @@ Vowels:
 y → [ue]
 
 Example: kärlek (love)
-Transcription: [ch][ae]r·l[eh]k >
+Transcription: [ch][ae]r.l[eh]k >
 Features: Shows front vowel, consonant cluster, and devoicing
 Icelandic
 Consonants:
@@ -1265,7 +1265,7 @@ Vowels:
 ø → [oe]
 
 Example: kærleiki (love)
-Transcription: [ch][ae]r·l[ai]·ki >
+Transcription: [ch][ae]r.l[ai].ki >
 Features: Shows palatalization, diphthong, and consonant gradation
 
 ### C.9 Slavic Languages
@@ -1289,7 +1289,7 @@ Vowels:
 - ё → [yo]
 
 Example: любовь (love)
-Transcription: l[yu]·b[ao]v' >
+Transcription: l[yu].b[ao]v' >
 Features: Shows palatalization, vowel reduction, and final soft sign
 
 #### Polish
@@ -1313,7 +1313,7 @@ Vowels:
 - y → [uh]
 
 Example: miłość (love)
-Transcription: m[i]·w[ao][sj][tj] >
+Transcription: m[i].w[ao][sj][tj] >
 Features: Shows nasal vowels, palatalization, and final devoicing
 
 #### Czech
@@ -1336,7 +1336,7 @@ Vowels:
 - ý → [uh]^
 
 Example: láska (love)
-Transcription: la^s·ka >
+Transcription: la^s.ka >
 Features: Shows long vowels, voicing assimilation, and stress
 
 #### Slovak
@@ -1361,7 +1361,7 @@ Vowels:
 - ä → [ae]
 
 Example: láska (love)
-Transcription: la^s·ka >
+Transcription: la^s.ka >
 Features: Shows long vowels, palatalization, and rhythmic law
 
 #### Ukrainian
@@ -1386,7 +1386,7 @@ Vowels:
 - я → [ya]
 
 Example: любов (love)
-Transcription: l[yu]·b[o]v >
+Transcription: l[yu].b[o]v >
 Features: Shows palatalization, vowel harmony, and final devoicing
 
 #### Bulgarian
@@ -1407,7 +1407,7 @@ Vowels:
 - е → [eh]
 
 Example: любов (love)
-Transcription: l[yu]·b[o]v >
+Transcription: l[yu].b[o]v >
 Features: Shows palatalization and stress pattern
 
 #### Croatian/Serbian/Bosnian
@@ -1430,7 +1430,7 @@ Vowels:
 - r/р → syllabic r
 
 Example: ljubav/љубав (love)
-Transcription: [lj]u·b[a]v >
+Transcription: [lj]u.b[a]v >
 Features: Shows palatalization and pitch accent system
 
 #### Slovenian
@@ -1450,7 +1450,7 @@ Vowels:
 - ô → [ao]^
 
 Example: ljubezen (love)
-Transcription: [lj]u·b[eh]·z[eh]n >
+Transcription: [lj]u.b[eh].z[eh]n >
 Features: Shows vowel reduction and stress patterns
 
 ### C.10 Romance Languages
@@ -1485,7 +1485,7 @@ Vowels:
    - un/um → [un]
 
 Example: amour (love)
-Transcription: a·m[u]r >
+Transcription: a.m[u]r >
 Features: Shows uvular r, vowel quality, and final stress
 
 #### Spanish
@@ -1508,7 +1508,7 @@ Vowels:
 - ü → [ue]
 
 Example: amor (love)
-Transcription: a·m[o]r >
+Transcription: a.m[o]r >
 Features: Shows tap/trill distinction and stress marking
 
 #### Portuguese
@@ -1536,7 +1536,7 @@ Vowels:
 - ü → [ue]
 
 Example: amor (love)
-Transcription: a·m[o]r >
+Transcription: a.m[o]r >
 Features: Shows nasal vowels, vowel reduction, and stress
 
 #### Italian
@@ -1560,7 +1560,7 @@ Vowels:
 - ù → u^
 
 Example: amore (love)
-Transcription: a·m[o]·r[eh] >
+Transcription: a.m[o].r[eh] >
 Features: Shows gemination, open/closed vowels, and stress
 
 #### Romanian
@@ -1581,7 +1581,7 @@ Vowels:
 - ú → u^
 
 Example: dragoste (love)
-Transcription: dra·g[o]s·t[eh] >
+Transcription: dra.g[o]s.t[eh] >
 Features: Shows central vowels and consonant clusters
 
 #### Catalan
@@ -1606,7 +1606,7 @@ Vowels:
 - ü → [ue]
 
 Example: amor (love)
-Transcription: [uh]·m[o]^ >
+Transcription: [uh].m[o]^ >
 Features: Shows vowel reduction and stress patterns
 
 #### Occitan
@@ -1631,7 +1631,7 @@ Vowels:
 - ü → [ue]
 
 Example: amor (love)
-Transcription: a·m[u]r >
+Transcription: a.m[u]r >
 Features: Shows vowel quality and final consonant treatment
 
 #### Sardinian
@@ -1651,7 +1651,7 @@ Vowels:
 - ù → u^
 
 Example: amori (love)
-Transcription: a·m[o]·ri >
+Transcription: a.m[o].ri >
 Features: Shows consonant lenition and vowel system
 
 ### C.11 North American Native Languages
@@ -1695,7 +1695,7 @@ Tones:
 - Falling: â → a^_
 
 Example: ayóó ánóshní (love)
-Transcription: a·y[o]^[o]^·[a]^·n[o]^[sh]·n[i]^ >
+Transcription: a.y[o]^[o]^.[a]^.n[o]^[sh].n[i]^ >
 Features: Shows tone patterns, nasal vowels, and ejective consonants
 
 #### Cherokee (ᏣᎳᎩ)
@@ -1730,7 +1730,7 @@ Tones:
 - Falling: â → a^_
 
 Example: ᎬᎨᏳᎯ (love)
-Transcription: g[uh]·g[eh]·yu·hi >
+Transcription: g[uh].g[eh].yu.hi >
 Features: Shows complex syllabary, tone system, and vowel qualities
 
 #### Mohawk (Kanien'kéha)
@@ -1756,7 +1756,7 @@ Vowels:
 - on → [on]
 
 Example: konnonhkwa' (love)
-Transcription: k[o]n·n[o]n·[hw]a['] >
+Transcription: k[o]n.n[o]n.[hw]a['] >
 Features: Shows glottal stops, nasal vowels, and stress patterns
 
 #### Lakota
@@ -1798,7 +1798,7 @@ Vowels:
 - ų́ → [un]^
 
 Example: tečhihila (love)
-Transcription: t[eh]·[ch]i·hi·la >
+Transcription: t[eh].[ch]i.hi.la >
 Features: Shows aspirated stops, nasal vowels, and stress patterns
 
 #### Cree
@@ -1826,7 +1826,7 @@ Vowels:
 - ô → o^
 
 Example: sâkihitowin (love)
-Transcription: s[aa]·ki·hi·to·win >
+Transcription: s[aa].ki.hi.to.win >
 Features: Shows long vowels and consonant clusters
 
 #### Inuktitut
@@ -1855,7 +1855,7 @@ Vowels:
 - uu → u:
 
 Example: nalligijaujuq (love)
-Transcription: nal·li·gi·jau·juq >
+Transcription: nal.li.gi.jau.juq >
 Features: Shows double consonants, long vowels, and uvular consonants
 
 #### Tlingit
@@ -1905,7 +1905,7 @@ Tones:
 - Falling: â → a^_
 
 Example: xat yak'éi (love)
-Transcription: [qh]at·ya·k'[eh]^i >
+Transcription: [qh]at.ya.k'[eh]^i >
 Features: Shows ejective consonants, tone system, and uvular consonants
 
 #### Haida

@@ -1,3 +1,4 @@
+import {ulid} from 'ulid';
 import {HangulEmbeddingEncoder} from "./src/hangul-embedding-encoder.js";
 
     const VALID_MANGO_OPERATORS = new Set([
@@ -6,6 +7,42 @@ import {HangulEmbeddingEncoder} from "./src/hangul-embedding-encoder.js";
         '$mod', '$regex', '$or', '$and', '$nor', '$not',
         '$all', '$elemMatch'
     ]);
+
+    async function toSerializable(data) {
+        data = await data;
+        if(data+""==="NaN") return "#NaN";
+        if(data+""==="Infinity") return "#Infinity";
+        if(data+""==="-Infinity") return "-#Infinity";
+        const type = typeof data;
+        if(!data || type === 'string' || type === 'number' || type === 'boolean') return data;
+        if(type === 'symbol') return `@${data.toString()}`;
+        if(Array.isArray(data)) {
+            for(let i=0; i<data.length; i++) data[i] = await toSerializable(data[i]);
+        }
+        if(type === 'object') {
+            if(data instanceof Date) return `Date@${data.getTime()}`;
+            for(let key in data) data[key] = await toSerializable(data[key]);
+            return data;
+        }
+    }
+
+    function deserialize(data) {
+        if(data==="#NaN") return NaN;
+        if(data==="#Infinity") return Infinity;
+        if(data==="-#Infinity") return -Infinity;
+        const type = typeof data;
+        // if is a string representation of a symbol, turn back into a symbol
+        if(type==="string") {
+            if(data.startsWith("@Symbol(") && data.endsWith(")")) return Symbol(data.slice(7,-1));
+            if(data.startsWith("Date@")) return new Date(Number(data.slice(5)));
+        }
+        if(Array.isArray(data)) return data.map(deserialize);
+        if(data && type === 'object') {
+            Object.entries(data).forEach(([key,value]) => data[key] = deserialize(value));
+            return data;
+        }
+        return data;
+    }
 
     function argLength(func) {
         const funcStr = func.toString();
@@ -1050,16 +1087,20 @@ async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy
 
         // Helper function to convert document to class instance
         function docToInstance(doc) {
+            if (!doc) return doc;
             const metadata = doc[":"];
-            if (!doc || !metadata) return doc;
+            let cname;
+            if(doc._id?.includes("@")) {
+                cname = doc._id.split("@")[0];
+            } else {
+                cname = metadata?.cname;
+            }
 
-            let prototype = pouchdb.classPrototypes[metadata.cname];
+            let prototype = pouchdb.classPrototypes[cname];
 
             // If prototype not found in local registry, look in globalThis
-            if (!prototype && globalThis[metadata.cname]) {
-                prototype = globalThis[metadata.cname].prototype;
-                // Cache the prototype for future use
-                pouchdb.classPrototypes[metadata.cname] = prototype;
+            if (!prototype && globalThis[cname]) {
+                prototype = globalThis[cname].prototype;
             }
 
             if (!prototype) return doc;
@@ -1068,7 +1109,7 @@ async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy
             const instance = Object.create(prototype);
             Object.assign(instance, doc);
             Object.defineProperty(instance, ':', { enumerable:false,configirable:false,writable: true,value: metadata  });
-            return instance;
+            return deserialize(instance);
         }
 
         // Override put function
@@ -1077,6 +1118,9 @@ async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy
 
             if (liveObject && doc && typeof doc === 'object') {
                 const constructorName = doc.constructor.name;
+                if(!doc._id) {
+                    doc._id = `${constructorName}@${ulid()}`;
+                }
                 if (constructorName !== 'Object') {
                     const metadata = doc[":"]||{},
                         proto = Object.getPrototypeOf(doc);
@@ -1089,8 +1133,8 @@ async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy
                         this.classPrototypes[constructorName] = proto;
                     }
                 }
+                doc = await toSerializable(structuredClone(doc));
             }
-
             return originalPut.call(this, doc, options);
         };
         let PUTS = [];
@@ -1446,6 +1490,12 @@ async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy
             });
         }
 
+        static deserialize(data) {
+            return deserialize(data);
+        }
+        static toSerializable(data) {
+            return toSerializable(data);
+        }
     }
 
     // Export both as default and named

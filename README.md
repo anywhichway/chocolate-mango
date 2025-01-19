@@ -227,6 +227,11 @@ If `liveObjects` is set to an object with the property:value `persit:true`, any 
 
 Note: the `unicode-name` package has been copied into the `src` directory due to build issues with the package. This will be resolved in a future release.
 
+### Version 0.0.6 (2025-01-19)
+
+- Improved serialization of live objects, now support NaN, Infinity, and -Infinity
+- Added unit tests for live objects
+
 ### Version 0.0.5 (2024-12-22)
 
 - Improved vector storage and search capabilities.
