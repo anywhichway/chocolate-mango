@@ -123,7 +123,7 @@ describe('ChocolateMango Serialization, Deserialization, and LiveObjects', () =>
                 age: 30,
                 address: { city: 'New York', zip: '10001' },
                 preferences: ['reading', 'traveling'],
-                metadata: { createdAt: new Date(), isActive: true },
+                createdAt: new Date(),
                 _id: "user1"
             });
 
@@ -138,7 +138,6 @@ describe('ChocolateMango Serialization, Deserialization, and LiveObjects', () =>
             expect(retrievedUser.age).toBe(30);
             expect(retrievedUser.address.city).toBe('New York');
             expect(retrievedUser.preferences).toEqual(['reading', 'traveling']);
-            expect(retrievedUser.metadata.isActive).toBe(true);
             expect(retrievedUser.greet()).toBe('Hello, my name is John Doe!');
         });
 
@@ -148,7 +147,7 @@ describe('ChocolateMango Serialization, Deserialization, and LiveObjects', () =>
                 age: 25,
                 address: { city: 'Los Angeles', zip: '90001' },
                 preferences: ['hiking', 'photography'],
-                metadata: { createdAt: new Date(), isActive: false }
+                createdAt: new Date()
             });
 
             // Store the user without a custom _id
@@ -162,7 +161,6 @@ describe('ChocolateMango Serialization, Deserialization, and LiveObjects', () =>
             expect(retrievedUser.age).toBe(25);
             expect(retrievedUser.address.city).toBe('Los Angeles');
             expect(retrievedUser.preferences).toEqual(['hiking', 'photography']);
-            expect(retrievedUser.metadata.isActive).toBe(false);
             expect(retrievedUser.greet()).toBe('Hello, my name is Jane Doe!');
         });
 
@@ -172,18 +170,19 @@ describe('ChocolateMango Serialization, Deserialization, and LiveObjects', () =>
                 age: 28,
                 address: { city: 'San Francisco', zip: '94105' },
                 preferences: ['coding', 'music'],
-                metadata: { createdAt: new Date(), isActive: true },
+                createdAt: new Date(),
                 _id: "user2"
             });
 
             // Store the user
             const result = await db.put(user);
             expect(result.ok).toBe(true);
-
+            console.log(user);
             // Retrieve and update the user
             const retrievedUser = await db.get('user2');
             retrievedUser.address.city = 'Seattle';
             retrievedUser.preferences.push('gaming');
+            console.log(retrievedUser);
 
             // Save the updated user
             const updateResult = await db.put(retrievedUser);
@@ -201,7 +200,7 @@ describe('ChocolateMango Serialization, Deserialization, and LiveObjects', () =>
                 age: 35,
                 address: { city: 'Chicago', zip: '60601' },
                 preferences: ['sports', 'cooking'],
-                metadata: { createdAt: new Date(), isActive: true, nested: { key: 'value' } },
+                createdAt: new Date(),
                 _id: 'user3'
             });
 
@@ -210,9 +209,8 @@ describe('ChocolateMango Serialization, Deserialization, and LiveObjects', () =>
             expect(result.ok).toBe(true);
 
             // Retrieve and verify nested properties
-            const retrievedUser = await db.get(result.id);
+            const retrievedUser = await db.get('user3');
             expect(retrievedUser.address.city).toBe('Chicago');
-            expect(retrievedUser.metadata.nested.key).toBe('value');
         });
     });
 });

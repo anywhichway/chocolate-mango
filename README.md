@@ -182,7 +182,7 @@ If `liveObjects` is set to an object with the property:value `persit:true`, any 
     
     // Initialize PouchDB with ChocolateMango
     const db = new PouchDB('mydb');
-    await ChocolateMango.dip(db,{liveObjects: {persist:"deep"},triggers:true,vectors:true});
+    await ChocolateMango.dip(db,{liveObjects: true,triggers:true,vectors:true});
     
     db.createTrigger('*', {name : {$exists: true}}, async (event,doc) => {
       console.log(`${event}:`, doc);
@@ -209,6 +209,8 @@ If `liveObjects` is set to an object with the property:value `persit:true`, any 
     const retrieved = await db.get(person._id);
     console.log(retrieved.sayHello()); // "Hello, I'm John"
     console.log(retrieved[":"]);
+    
+    // Demonstrate auto updating
     retrieved.address = {city:"Seattle"};
     setTimeout(async () => {
       const retrieved = await db.get(person._id);
@@ -227,7 +229,12 @@ If `liveObjects` is set to an object with the property:value `persit:true`, any 
 
 Note: the `unicode-name` package has been copied into the `src` directory due to build issues with the package. This will be resolved in a future release.
 
-### Version 0.0.6 (2025-01-19)
+
+### Version 0.0.8 (2025-01-19)
+
+- Further improved serialization of live objects, `:` metadata no longer enumerable
+
+### Version 0.0.7 (2025-01-19)
 
 - Improved serialization of live objects, now support NaN, Infinity, and -Infinity
 - Added unit tests for live objects

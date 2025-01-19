@@ -1108,7 +1108,7 @@ async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy
             // Create new object with the prototype and copy document properties
             const instance = Object.create(prototype);
             Object.assign(instance, doc);
-            Object.defineProperty(instance, ':', { enumerable:false,configirable:false,writable: true,value: metadata  });
+            Object.defineProperty(instance, ':', { enumerable:false,configurable:true,writable: true,value: metadata  });
             return deserialize(instance);
         }
 
@@ -1116,7 +1116,7 @@ async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy
         pouchdb.put = async function(doc, options = {}) {
             const liveObject = options.liveObject ?? this.liveObjects;
 
-            if (liveObject && doc && typeof doc === 'object') {
+            if (liveObject && doc && typeof doc === 'object' && (!doc._id || doc._id[0] !== '_')) {
                 const constructorName = doc.constructor.name;
                 if(!doc._id) {
                     doc._id = `${constructorName}@${ulid()}`;
@@ -1126,14 +1126,16 @@ async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy
                         proto = Object.getPrototypeOf(doc);
                     Object.assign(metadata, options.metadata);
                     metadata.cname = constructorName;
-                    doc = { ...doc };
-                    doc[":"] = metadata;
+                    Object.defineProperty(doc,':',{enumerable:true,configurable:true,writable: true,value:metadata});
                     // Store prototype if not already stored
                     if (!this.classPrototypes[constructorName]) {
                         this.classPrototypes[constructorName] = proto;
                     }
                 }
-                doc = await toSerializable(structuredClone(doc));
+                const result = await originalPut.call(this,await toSerializable( structuredClone({...doc})),options);
+                Object.defineProperty(doc,':',{enumerable:false,configurable:true,writable: true,value:doc[":"]});
+                doc._rev = result.rev;
+                return result;
             }
             return originalPut.call(this, doc, options);
         };
@@ -1169,7 +1171,6 @@ async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy
                     doc = doc._id[0]==="_" ? doc : new Proxy(doc, handler);
                 }
             }
-
             return doc;
         };
 
