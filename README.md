@@ -89,6 +89,22 @@ const result = await db.find({
 See [Predicates Documentation](./docs/predicates.md)
 See [Transforms Documentation](./docs/transforms.md)
 
+### Additional Database Methods
+
+#### async db.patch(id, patch,createIfMissing)
+Returns: Promise for {ok, id, rev}
+
+Retrieves the document with `id` and walks the patch applying the changes. Properties explicitly set to `undefined` will be removed. 
+If the document does not exist, it will be created if `createIfMissing` is true. Resolves a promise for a doc and any promises in the document before saving.
+
+#### async db.upsert(doc,mutate)
+Returns: Promise for {ok, id, rev}
+
+Creates or updates a document. If the document already exists, it will be updated with the new values. If the document does not exist, it will be created and `_id` assigned if one does not exist.
+Resolves a promise for a doc and any promises in the document before saving. If mutate is true, then `doc` is mutated to match the full saved document.
+
+```javascript
+
 ### Direct In-Memory Querying
 
 You can use ChocolateMango's query capabilities directly on in-memory objects and arrays without PouchDB:
@@ -170,6 +186,9 @@ reserved for PouchDB). The metadata includes any metadata that was stored with t
 
 If `liveObjects` is set to an object with the property:value `persit:true`, any changes to the object will automatically save it to the database.
 
+ChocolateMango supports triggers for `*`, `new`, `changed`, and `deleted` events. Triggers can be created using the `createTrigger` method on the database instance.
+
+
 ```javascript
     import PouchDB from 'https://cdn.skypack.dev/pouchdb';
     import pouchDBFind from 'https://cdn.skypack.dev/pouchdb-find';
@@ -201,8 +220,7 @@ If `liveObjects` is set to an object with the property:value `persit:true`, any 
     }
     
     // Store an instance
-    const person = new Person({address:{city:"New York"}});
-    person.name = "John";
+    const person = new Person({name:"John",address:{city:"New York"}});
     await db.put(person,{metadata:{createdBy:"Simon"}});
     
     // Retrieve with prototype
@@ -219,7 +237,31 @@ If `liveObjects` is set to an object with the property:value `persit:true`, any 
 ```
 
 
-## Documentation
+```javascript
+        
+    db.createTrigger('*', {name : {$exists: true}}, async (event,doc) => {
+      console.log(`${event}:`, doc);
+    });
+    
+    // Create class with methods
+    class Person {
+      constructor(props={}) {
+        this._id = props.id || crypto.randomUUID();
+        Object.assign(this,props);
+      }
+    }
+    
+    // Store an instance
+    const person = new Person({address:{city:"New York"}});
+    await db.put(person,{metadata:{createdBy:"Simon"}});
+    person.name = "John";
+    
+    // Retrieve with prototype
+    const retrieved = await db.get(person._id);
+    console.log(retrieved.sayHello()); // "Hello, I'm John"
+```
+
+## Other Documentation
 
 - [Predicates Documentation](./docs/predicates.md)
 - [Transforms Documentation](./docs/transforms.md)
@@ -229,6 +271,13 @@ If `liveObjects` is set to an object with the property:value `persit:true`, any 
 
 Note: the `unicode-name` package has been copied into the `src` directory due to build issues with the package. This will be resolved in a future release.
 
+
+### Version 0.0.9 (2025-01-29)
+
+- Added `patch`, `upsert`
+- Modified PouchDB `post` to generate sequential keys, at least in the context of the local device
+- Improved trigger documentation
+- Resolved issue related to promised puts with live objects
 
 ### Version 0.0.8 (2025-01-19)
 

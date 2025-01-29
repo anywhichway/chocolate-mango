@@ -1,4 +1,3 @@
-import {ulid} from 'ulid';
 import {HangulEmbeddingEncoder} from "./src/hangul-embedding-encoder.js";
 
     const VALID_MANGO_OPERATORS = new Set([
@@ -318,6 +317,13 @@ import {HangulEmbeddingEncoder} from "./src/hangul-embedding-encoder.js";
                 btype = typeof b;
             if(atype === "object" && btype === "function" && a instanceof b) return a;
             if(atype === "object" && btype === "string" && b === a.constructor.name) return a;
+        },
+        $cname(a, b) {
+            if(!a || !b) return;
+            const atype = typeof a,
+                btype = typeof b;
+            if(atype === "object" && btype === "string" && b === a.constructor.name) return a;
+            if(atype === "object" && btype === "string" && b === a[":"]?.cname) return a;
         },
         $isDate(a) {
             const type = typeof a;
@@ -1084,17 +1090,26 @@ async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy
         const originalPut = pouchdb.put;
         const originalGet = pouchdb.get;
         const originalFind = pouchdb.find;
+        const originalPost = pouchdb.post;
+
+        function keyGen(prefix = '') {
+            const timestamp = String(Date.now()).padStart(16, '0');
+            const random = Math.random().toString(36).substring(2, 8);
+            return `${prefix}${timestamp}${random}`;
+        }
+
+        function getKeyTimestamp(key) {
+            const timestampPart = key.slice(0, 16);
+            return parseInt(timestampPart, 10);
+        }
 
         // Helper function to convert document to class instance
         function docToInstance(doc) {
             if (!doc) return doc;
-            const metadata = doc[":"];
-            let cname;
-            if(doc._id?.includes("@")) {
-                cname = doc._id.split("@")[0];
-            } else {
+            const metadata = doc[":"],
                 cname = metadata?.cname;
-            }
+
+            if(!cname) return doc;
 
             let prototype = pouchdb.classPrototypes[cname];
 
@@ -1112,64 +1127,47 @@ async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy
             return deserialize(instance);
         }
 
-        // Override put function
-        pouchdb.put = async function(doc, options = {}) {
-            const liveObject = options.liveObject ?? this.liveObjects;
-
-            if (liveObject && doc && typeof doc === 'object' && (!doc._id || doc._id[0] !== '_')) {
-                const constructorName = doc.constructor.name;
-                if(!doc._id) {
-                    doc._id = `${constructorName}@${ulid()}`;
-                }
-                if (constructorName !== 'Object') {
-                    const metadata = doc[":"]||{},
-                        proto = Object.getPrototypeOf(doc);
-                    Object.assign(metadata, options.metadata);
-                    metadata.cname = constructorName;
-                    Object.defineProperty(doc,':',{enumerable:true,configurable:true,writable: true,value:metadata});
-                    // Store prototype if not already stored
-                    if (!this.classPrototypes[constructorName]) {
-                        this.classPrototypes[constructorName] = proto;
-                    }
-                }
-                const result = await originalPut.call(this,await toSerializable( structuredClone({...doc})),options);
-                Object.defineProperty(doc,':',{enumerable:false,configurable:true,writable: true,value:doc[":"]});
-                doc._rev = result.rev;
-                return result;
+        function deproxy() {
+            if(!this || typeof this !== 'object') return this;
+            const result = Array.isArray(this) ? [] : {};
+            for(const [key, value] of Object.entries(this)) {
+                result[key] = value && typeof value.deproxy === "function" ? value.deproxy() : value;
             }
-            return originalPut.call(this, doc, options);
-        };
-        let PUTS = [];
+            return result;
+        }
         // Override get function
+        let promisedPuts = [];
         pouchdb.get = async function(docId, options = {}) {
             const liveObject = options.liveObject ?? this.liveObjects;
             let doc = await originalGet.call(this, docId, options);
 
-            if (liveObject) {
-                doc = docToInstance(doc);
-                if(liveObject) {
-                    // wrap with a Proxy that will persist changes to the database
-                    // if persist === "deep" then all nested objects that are not Arrays or just plain Objects will also be wrapped with a Proxy
-                    // a parentId will be added to the metadata of child objects to track the parent object
-                    const persist = liveObject.persist;
-                    const parentId = doc._id;
-                    const handler = {
-                        set(target, prop, value) {
+            doc = docToInstance(doc);
+            if(liveObject) {
+                // wrap with a Proxy that will persist changes to the database
+                // if persist === "deep" then all nested objects that are not Arrays or just plain Objects will also be wrapped with a Proxy
+                // a parentId will be added to the metadata of child objects to track the parent object
+                const persist = liveObject.persist;
+                const parentId = doc._id;
+                const handler = {
+                    set(target, prop, value) {
+                        if (persist && value && typeof value === "object" && typeof value.deproxy !== "function" && ![Date,Set,Map,RegExp].some(cls => value instanceof cls)) {
+                            Object.defineProperty(value,"deproxy",{value:deproxy});
+                            target[prop] = new Proxy(value, handler);
+                        } else {
                             target[prop] = value;
-                            if (persist && value && typeof value === "object" && ![Date,Set,Map,RegExp].some(cls => value instanceof cls)) {
-                                target[prop] = new Proxy(value, handler);
-                            }
-                            if(prop[0]!=="_") pouchdb.put(doc,{force:true,metadata:doc[":"]})
-                            return true;
-                        },
-                        deleteProperty(target, prop) {
-                            delete target[prop];
-                            if(prop[0]!=="_") pouchdb.put(doc,{force:true,metadata:doc[":"]})
-                            return true;
                         }
-                    };
-                    doc = doc._id[0]==="_" ? doc : new Proxy(doc, handler);
-                }
+                        if(prop[0]!=="_") {
+                            promisedPuts.push(pouchdb.put(doc,{force:true,metadata:doc[":"]}));
+                        }
+                        return true;
+                    },
+                    deleteProperty(target, prop) {
+                        delete target[prop];
+                        if(prop[0]!=="_") pouchdb.put(doc,{force:true,metadata:doc[":"]})
+                        return true;
+                    }
+                };
+                doc = doc._id[0]==="_" ? doc : new Proxy(doc, handler);
             }
             return doc;
         };
@@ -1186,7 +1184,91 @@ async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy
             return result;
         };
 
+        pouchdb.patch = async function(docId, patches,{createIfMissing = false,...rest}={}) {
+            docId = await docId;
+            const doc = await this.get(docId).catch((e) => {
+                if(createIfMissing) return {_id:docId};
+                throw e;
+            });
+            const patchedDoc = await patch(doc,patches);
+            return this.put(patchedDoc,rest);
+        }
+
+        pouchdb.post = async function(doc, {copy,...rest}={}) {
+            if(copy) {
+                doc = {...doc};
+                doc._id = keyGen();
+            } else if(!doc._id) {
+                doc._id = keyGen();
+            }
+            return this.put(doc,...rest);
+        }
+
+        // Override put function
+        pouchdb.put = async function(doc, options = {}) {
+            if(promisedPuts.length > 0) { 
+                await Promise.all(promisedPuts); 
+                promisedPuts = [];
+            }
+            if (doc && typeof doc === 'object' && (!doc._id || doc._id[0] !== '_')) {
+                const constructorName = doc.constructor.name;
+                if(!doc._id) {
+                    doc._id = keyGen();
+                }
+                if (constructorName !== 'Object') {
+                    const metadata = doc[":"]||{},
+                        proto = Object.getPrototypeOf(doc);
+                    Object.assign(metadata, options.metadata);
+                    metadata.cname = constructorName;
+                    Object.defineProperty(doc,':',{enumerable:true,configurable:true,writable: true,value:metadata});
+                    // Store prototype if not already stored
+                    if (!this.classPrototypes[constructorName]) {
+                        this.classPrototypes[constructorName] = proto;
+                    }
+                }
+                const result = await originalPut.call(this,await toSerializable( structuredClone(deproxy.call({...doc}))),options);
+                Object.defineProperty(doc,':',{enumerable:false,configurable:true,writable: true,value:doc[":"]});
+                doc._rev = result.rev;
+                return result;
+            }
+            const {ok,id,rev} = await originalPut.call(this, doc, {...options,force:true});
+            doc._id = id;
+            doc._rev = rev;
+            return {ok,id,rev};
+        };
+
+
+        pouchdb.upsert = async function(doc,{mutate,...rest}={}) {
+            doc._id ||= keyGen();
+            let target = await this.get(doc._id).catch(() => ({_id:doc._id}));
+            if(!target._rev && doc._rev) target._rev = doc._rev;
+            await patch(target,doc);
+            const {ok,rev,id} = await this.put(target, rest);
+            if(mutate) Object.assign(doc,target);
+            doc._id = id;
+            doc._rev = rev;
+            return {ok,rev,id};
+        }
+
+
         return pouchdb;
+    }
+
+    const patch = async (target, patches) => {
+        target = await target;
+        patches = await patches;
+        for(let [key, value] of Object.entries(patches)) {
+            if(["_id","_rev"].includes(key)) continue;
+            value = await value;
+            if(value === undefined) {
+                delete target[key];
+            } else if(typeof value === 'object' && value !== null && typeof target[key] === 'object') {
+                patch(target[key], value);
+            } else {
+                target[key] = value;
+            }
+        }
+        return target;
     }
 
     function setupTriggers(pouchdb) {
@@ -1202,8 +1284,7 @@ async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy
 
             _changes = pouchdb.changes({
                 since: 'now',
-                live: true,
-                include_docs: true
+                live: true
             });
 
             _changes.on('change', (change) => {
@@ -1211,17 +1292,82 @@ async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy
             });
         }
 
+        function diff(obj1, obj2) {
+            if(!obj1 || !obj2 || typeof obj1 !== 'object' || typeof obj2 !== 'object') {
+                return obj1;
+            }
+
+            const patch = {};
+
+            for(const [key, value] of Object.entries(obj1)) {
+                if(!(key in obj2)) {
+                    patch[key] = value;
+                } else if(value instanceof Date && obj2[key] instanceof Date) {
+                    if(value.getTime() !== obj2[key].getTime()) {
+                        patch[key] = value;
+                    }
+                } else if(value instanceof RegExp && obj2[key] instanceof RegExp) {
+                    if(value.source !== obj2[key].source || value.flags !== obj2[key].flags) {
+                        patch[key] = value;
+                    }
+                } else if(value instanceof Set && obj2[key] instanceof Set) {
+                    if([...value].toString() !== [...obj2[key]].toString()) {
+                        patch[key] = value;
+                    }
+                } else if(value instanceof Map && obj2[key] instanceof Map) {
+                    if([...value.entries()].toString() !== [...obj2[key].entries()].toString()) {
+                        patch[key] = value;
+                    }
+                } else if(ArrayBuffer.isView(value) && ArrayBuffer.isView(obj2[key])) {
+                    if(value.toString() !== obj2[key].toString()) {
+                        patch[key] = value;
+                    }
+                } else if(typeof value === 'bigint' && typeof obj2[key] === 'bigint') {
+                    if(value !== obj2[key]) {
+                        patch[key] = value;
+                    }
+                } else if(typeof value === 'symbol' && typeof obj2[key] === 'symbol') {
+                    if(value.description !== obj2[key].description) {
+                        patch[key] = value;
+                    }
+                } else if(typeof value === 'object' && typeof obj2[key] === 'object') {
+                    const childDiff = diff(value, obj2[key]);
+                    if(Object.keys(childDiff).length > 0) {
+                        patch[key] = childDiff;
+                    }
+                } else if(value !== obj2[key]) {
+                    patch[key] = value;
+                }
+            }
+
+            for(const key of Object.keys(obj2)) {
+                if(!(key in obj1)) {
+                    patch[key] = undefined;
+                }
+            }
+
+            return patch;
+        }
+
         // Process triggers based on database changes
         function processTriggers(change) {
-            const eventType = change.deleted ? 'delete' : change.doc._rev.startsWith('1-') ? 'new' : 'change';
+            const eventType = change.deleted ? 'delete' : change.changes[0].rev.startsWith('1-') ? 'new' : 'change';
 
             // Process triggers for both the specific event type and wildcard triggers
             ['*', eventType].forEach(type => {
                 if (_triggers.has(type)) {
                     const triggersForType = _triggers.get(type);
-                    triggersForType.forEach(trigger => {
-                        if (matchesFilter(change.doc, trigger.filter)) {
-                            trigger.callback.call(pouchdb,eventType, change.doc, trigger.filter);
+                    triggersForType.forEach(async trigger => {
+                        const doc = await pouchdb.get(change.id,{revs:true}).catch(() => null);
+                        if (doc && matchesFilter(doc, trigger.filter)) {
+                            const prevRevId = doc._revisions.ids[1] ? `${parseInt(doc._rev)-1}-${doc._revisions.ids[1]}` : null,
+                                prevDoc = prevRevId ? await pouchdb.get(doc._id, { rev: prevRevId }).catch(() => null) : null,
+                                patches = diff(prevDoc, doc);
+                            Object.defineProperty(doc,"rollback",{value:async () => {
+                                if(!doc._revisions.ids[1]) return;
+                                return pouchdb.remove(doc._id,{rev: doc._rev});
+                            }})
+                            trigger.callback.call(pouchdb,eventType, doc, trigger.filter, patches);
                         }
                     });
                 }

@@ -18,13 +18,109 @@ class User {
     }
 }
 
+
+
 describe('ChocolateMango Serialization, Deserialization, and LiveObjects', () => {
 
     // Helper function to create a test database with liveObjects enabled
     async function createTestDatabase() {
-        const db = new PouchDB('testdb');
+        let db = new PouchDB('testdb');
+        await db.destroy(); // Ensure a clean state
+        db = new PouchDB('testdb');
         return ChocolateMango.dip(db, { liveObjects: true });
     }
+
+    describe(`Database Extensions`,() => {
+        /* pouchdb.patch = async function(docId, patches,createIfMissing = false) {
+                docId = await docId;
+                const doc = await this.get(docId).catch((e) => createIfMissing ? {_id:docId} : throw e);
+                const patchedDoc = await patch(doc,patches);
+                return await this.put(patchedDoc);
+            } */
+        // basic test
+        test(`PouchDB patch`,async () => {
+            const db = await createTestDatabase();
+            const docId = 'testDoc';
+            const patches = { name: 'John Doe', age: 30 };
+
+            // Create a document
+            await db.put({ _id: docId, name: 'Jane Doe', age: 25 });
+
+            // Patch the document
+            await db.patch(docId, patches);
+
+            // Retrieve the patched document
+            const patchedDoc = await db.get(docId);
+
+            expect(patchedDoc.name).toBe(patches.name);
+            expect(patchedDoc.age).toBe(patches.age);
+        })
+        // test with promise for docId, promised patches, and promised values in patches
+        test(`PouchDB patch with promises`,async () => {
+            const db = await createTestDatabase();
+            const docIdPromise = Promise.resolve('testDoc');
+            const patchesPromise = Promise.resolve({ name: 'John Doe', age: Promise.resolve(30) });
+
+            // Create a document
+            await db.put({ _id: 'testDoc', name: 'Jane Doe', age: 25 });
+
+            // Patch the document
+            await db.patch(docIdPromise, patchesPromise);
+
+            // Retrieve the patched document
+            const patchedDoc = await db.get('testDoc');
+
+            expect(patchedDoc.name).toBe('John Doe');
+            expect(patchedDoc.age).toBe(30);
+        });
+        /*
+        pouchdb.upsert = async function(doc,mutate) {
+            const target = await this.get(doc._id).catch(() => ({}));
+            return this.patch(target, patch,true);
+        }
+         */
+        // basic test
+        test(`PouchDB upsert`,async () => {
+            const db = await createTestDatabase();
+            const doc = { _id: 'testDoc', name: 'John Doe', age: 30 };
+
+            // Upsert the document
+            await db.upsert(doc);
+
+            // Retrieve the upserted document
+            const upsertedDoc = await db.get('testDoc');
+
+            expect(upsertedDoc.name).toBe(doc.name);
+            expect(upsertedDoc.age).toBe(30);
+        })
+        // test with missing document
+        test(`PouchDB upsert with missing document`,async () => {
+            const db = await createTestDatabase();
+            const doc = { _id: 'newDoc', name: 'Jane Doe', age: 25 };
+
+            // Upsert the document
+            await db.upsert(doc);
+
+            // Retrieve the upserted document
+            const upsertedDoc = await db.get('newDoc');
+
+            expect(upsertedDoc.name).toBe(doc.name);
+            expect(upsertedDoc.age).toBe(25);
+        })
+        // test with no _id provided
+        test(`PouchDB upsert with no _id`,async () => {
+            const db = await createTestDatabase();
+            const doc = { name: 'No ID' };
+
+            // Attempt to upsert the document without an _id
+            await db.upsert(doc,{mutate:true});
+
+            const upsertedDoc = await db.get(doc._id).catch(() => null);
+
+            expect(upsertedDoc._id).toBeDefined()
+            // check that d
+        })
+    })
 
     // Test serialization and deserialization
     describe('Serialization and Deserialization', () => {
