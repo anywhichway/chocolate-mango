@@ -1191,7 +1191,8 @@ async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy
                 throw e;
             });
             const patchedDoc = await patch(doc,patches);
-            return this.put(patchedDoc,rest);
+            await this.put(patchedDoc,rest);
+            return this.get(docId);
         }
 
         pouchdb.post = async function(doc, {copy,...rest}={}) {
@@ -1201,7 +1202,7 @@ async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy
             } else if(!doc._id) {
                 doc._id = keyGen();
             }
-            return this.put(doc,...rest);
+            return this.put(doc,{...rest});
         }
 
         // Override put function
@@ -1226,7 +1227,7 @@ async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy
                         this.classPrototypes[constructorName] = proto;
                     }
                 }
-                const result = await originalPut.call(this,await toSerializable( structuredClone(deproxy.call({...doc}))),options);
+                const result = await originalPut.call(this,await toSerializable(await deepCopy(deproxy.call({...doc}))),options);
                 Object.defineProperty(doc,':',{enumerable:false,configurable:true,writable: true,value:doc[":"]});
                 doc._rev = result.rev;
                 return result;
@@ -1271,6 +1272,85 @@ async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy
         return target;
     }
 
+    async function deepCopy(obj) {
+        // Handle primitive types and null
+        if (obj === null || typeof obj !== 'object') {
+            return obj;
+        }
+
+        // Handle arrays
+        if (Array.isArray(obj)) {
+            return obj.map(deepCopy);
+        }
+
+        // Handle plain objects
+        const result = {};
+        for (const key in obj) {
+            if (obj.hasOwnProperty(key)) {
+                // Recursively copy each property
+                result[key] = await deepCopy(await obj[key]);
+            }
+        }
+        return result;
+    }
+
+    function diff(obj1, obj2) {
+        if(!obj1 || !obj2 || typeof obj1 !== 'object' || typeof obj2 !== 'object') {
+            return obj1;
+        }
+
+        const patch = {};
+
+        for(const [key, value] of Object.entries(obj1)) {
+            if(!(key in obj2)) {
+                patch[key] = value;
+            } else if(value instanceof Date && obj2[key] instanceof Date) {
+                if(value.getTime() !== obj2[key].getTime()) {
+                    patch[key] = value;
+                }
+            } else if(value instanceof RegExp && obj2[key] instanceof RegExp) {
+                if(value.source !== obj2[key].source || value.flags !== obj2[key].flags) {
+                    patch[key] = value;
+                }
+            } else if(value instanceof Set && obj2[key] instanceof Set) {
+                if([...value].toString() !== [...obj2[key]].toString()) {
+                    patch[key] = value;
+                }
+            } else if(value instanceof Map && obj2[key] instanceof Map) {
+                if([...value.entries()].toString() !== [...obj2[key].entries()].toString()) {
+                    patch[key] = value;
+                }
+            } else if(ArrayBuffer.isView(value) && ArrayBuffer.isView(obj2[key])) {
+                if(value.toString() !== obj2[key].toString()) {
+                    patch[key] = value;
+                }
+            } else if(typeof value === 'bigint' && typeof obj2[key] === 'bigint') {
+                if(value !== obj2[key]) {
+                    patch[key] = value;
+                }
+            } else if(typeof value === 'symbol' && typeof obj2[key] === 'symbol') {
+                if(value.description !== obj2[key].description) {
+                    patch[key] = value;
+                }
+            } else if(typeof value === 'object' && typeof obj2[key] === 'object') {
+                const childDiff = diff(value, obj2[key]);
+                if(Object.keys(childDiff).length > 0) {
+                    patch[key] = childDiff;
+                }
+            } else if(value !== obj2[key]) {
+                patch[key] = value;
+            }
+        }
+
+        for(const key of Object.keys(obj2)) {
+            if(!(key in obj1)) {
+                patch[key] = undefined;
+            }
+        }
+
+        return patch;
+    }
+
     function setupTriggers(pouchdb) {
         // Store triggers in a Map on the database instance
         const _triggers = new Map();
@@ -1290,63 +1370,6 @@ async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy
             _changes.on('change', (change) => {
                 processTriggers(change);
             });
-        }
-
-        function diff(obj1, obj2) {
-            if(!obj1 || !obj2 || typeof obj1 !== 'object' || typeof obj2 !== 'object') {
-                return obj1;
-            }
-
-            const patch = {};
-
-            for(const [key, value] of Object.entries(obj1)) {
-                if(!(key in obj2)) {
-                    patch[key] = value;
-                } else if(value instanceof Date && obj2[key] instanceof Date) {
-                    if(value.getTime() !== obj2[key].getTime()) {
-                        patch[key] = value;
-                    }
-                } else if(value instanceof RegExp && obj2[key] instanceof RegExp) {
-                    if(value.source !== obj2[key].source || value.flags !== obj2[key].flags) {
-                        patch[key] = value;
-                    }
-                } else if(value instanceof Set && obj2[key] instanceof Set) {
-                    if([...value].toString() !== [...obj2[key]].toString()) {
-                        patch[key] = value;
-                    }
-                } else if(value instanceof Map && obj2[key] instanceof Map) {
-                    if([...value.entries()].toString() !== [...obj2[key].entries()].toString()) {
-                        patch[key] = value;
-                    }
-                } else if(ArrayBuffer.isView(value) && ArrayBuffer.isView(obj2[key])) {
-                    if(value.toString() !== obj2[key].toString()) {
-                        patch[key] = value;
-                    }
-                } else if(typeof value === 'bigint' && typeof obj2[key] === 'bigint') {
-                    if(value !== obj2[key]) {
-                        patch[key] = value;
-                    }
-                } else if(typeof value === 'symbol' && typeof obj2[key] === 'symbol') {
-                    if(value.description !== obj2[key].description) {
-                        patch[key] = value;
-                    }
-                } else if(typeof value === 'object' && typeof obj2[key] === 'object') {
-                    const childDiff = diff(value, obj2[key]);
-                    if(Object.keys(childDiff).length > 0) {
-                        patch[key] = childDiff;
-                    }
-                } else if(value !== obj2[key]) {
-                    patch[key] = value;
-                }
-            }
-
-            for(const key of Object.keys(obj2)) {
-                if(!(key in obj1)) {
-                    patch[key] = undefined;
-                }
-            }
-
-            return patch;
         }
 
         // Process triggers based on database changes

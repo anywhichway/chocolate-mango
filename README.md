@@ -91,13 +91,13 @@ See [Transforms Documentation](./docs/transforms.md)
 
 ### Additional Database Methods
 
-#### async db.patch(id, patch,createIfMissing)
-Returns: Promise for {ok, id, rev}
+#### async db.patch(id, patch,{createIfMissing,...restOfStandardOptions}={})
+Returns: Promise for an object as if `db.get(id)` was called
 
 Retrieves the document with `id` and walks the patch applying the changes. Properties explicitly set to `undefined` will be removed. 
-If the document does not exist, it will be created if `createIfMissing` is true. Resolves a promise for a doc and any promises in the document before saving.
+If the document does not exist, it will be created if `createIfMissing` is true. Resolves a promise for an id and any promises in the patches before saving.
 
-#### async db.upsert(doc,mutate)
+#### async db.upsert(doc,{mutate,...restOfStandardOptions}={})
 Returns: Promise for {ok, id, rev}
 
 Creates or updates a document. If the document already exists, it will be updated with the new values. If the document does not exist, it will be created and `_id` assigned if one does not exist.
@@ -271,6 +271,12 @@ ChocolateMango supports triggers for `*`, `new`, `changed`, and `deleted` events
 
 Note: the `unicode-name` package has been copied into the `src` directory due to build issues with the package. This will be resolved in a future release.
 
+
+### Version 0.0.10 (2025-01-29)
+
+- Fixed spread bug in `db.post`
+- `db.patch` now returns the object using `db.get`
+- Moving away from `structuredClone` to a custom deepCopy to avoid errors
 
 ### Version 0.0.9 (2025-01-29)
 
