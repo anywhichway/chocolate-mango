@@ -248,6 +248,10 @@ ChocolateMango supports triggers for `*`, `new`, `changed`, and `deleted` events
       constructor(props={}) {
         this._id = props.id || crypto.randomUUID();
         Object.assign(this,props);
+        this.ready = this.init().then(() => this.ready = true);
+      }
+      async init() {
+          this.initialized = true;
       }
     }
     
@@ -259,6 +263,8 @@ ChocolateMango supports triggers for `*`, `new`, `changed`, and `deleted` events
     // Retrieve with prototype
     const retrieved = await db.get(person._id);
     console.log(retrieved.sayHello()); // "Hello, I'm John"
+    await retrieved.ready;
+    // instance is fully initialized
 ```
 
 ## Other Documentation
@@ -271,6 +277,8 @@ ChocolateMango supports triggers for `*`, `new`, `changed`, and `deleted` events
 
 Note: the `unicode-name` package has been copied into the `src` directory due to build issues with the package. This will be resolved in a future release.
 
+### Version 0.0.11 (2025-02-01)
+- Added ability to automatically call and await `init()` function when re-instantiating objects from database. Client code should optionally implement `async init()` and `await instance.ready`.
 
 ### Version 0.0.10 (2025-01-29)
 

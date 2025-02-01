@@ -1104,7 +1104,7 @@ async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy
         }
 
         // Helper function to convert document to class instance
-        function docToInstance(doc) {
+        async function docToInstance(doc) {
             if (!doc) return doc;
             const metadata = doc[":"],
                 cname = metadata?.cname;
@@ -1121,10 +1121,13 @@ async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy
             if (!prototype) return doc;
 
             // Create new object with the prototype and copy document properties
-            const instance = Object.create(prototype);
-            Object.assign(instance, doc);
+            let instance = Object.create(prototype);
+            Object.assign(instance, deserialize(doc));
             Object.defineProperty(instance, ':', { enumerable:false,configurable:true,writable: true,value: metadata  });
-            return deserialize(instance);
+            if(typeof instance.init ==="function") {
+                await instance.init();
+            }
+            return instance;
         }
 
         function deproxy() {
@@ -1141,7 +1144,7 @@ async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy
             const liveObject = options.liveObject ?? this.liveObjects;
             let doc = await originalGet.call(this, docId, options);
 
-            doc = docToInstance(doc);
+            doc = await docToInstance(doc);
             if(liveObject) {
                 // wrap with a Proxy that will persist changes to the database
                 // if persist === "deep" then all nested objects that are not Arrays or just plain Objects will also be wrapped with a Proxy
@@ -1265,7 +1268,7 @@ async function searchVectorContent(query, {limit = 5, maxLength = 5000, strategy
                 delete target[key];
             } else if(typeof value === 'object' && value !== null && typeof target[key] === 'object') {
                 patch(target[key], value);
-            } else {
+            } else if(target[key] !== value) {
                 target[key] = value;
             }
         }

@@ -10,11 +10,16 @@ PouchDB.plugin(PouchDBFind);
 // Define the User class with base and nested properties
 class User {
     constructor(config={}) {
-        Object.assign(this,config)
+        Object.assign(this,config);
+        this.ready = this.init().then(() => this.ready = true)
     }
 
     greet() {
         return `Hello, my name is ${this.name}!`;
+    }
+
+    async init() {
+        this.initialized = true;
     }
 }
 
@@ -235,6 +240,8 @@ describe('ChocolateMango Serialization, Deserialization, and LiveObjects', () =>
             expect(retrievedUser.address.city).toBe('New York');
             expect(retrievedUser.preferences).toEqual(['reading', 'traveling']);
             expect(retrievedUser.greet()).toBe('Hello, my name is John Doe!');
+            await retrievedUser.ready;
+            expect(retrievedUser.initialized).toBe(true);
         });
 
         test('should store and retrieve a User instance without _id', async () => {
