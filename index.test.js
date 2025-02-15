@@ -2,6 +2,8 @@ import PouchDB from 'pouchdb';
 import memoryAdapter from 'pouchdb-adapter-memory';
 import PouchDBFind from 'pouchdb-find'; // Import pouchdb-find
 import { ChocolateMango } from './index.js';
+import predicates from './src/predicates.js';
+import transforms from './src/transforms.js';
 
 // Register the memory adapter
 PouchDB.plugin(memoryAdapter);
@@ -125,6 +127,46 @@ describe('ChocolateMango Serialization, Deserialization, and LiveObjects', () =>
             expect(upsertedDoc._id).toBeDefined()
             // check that d
         })
+
+        test('PouchSB replace when not exists',async () => {
+            const db = await createTestDatabase();
+            const doc = { name: 'No ID' };
+
+            await db.replace(doc);
+
+            const newDoc = await db.get(doc._id).catch(() => null);
+
+            expect(newDoc._id).toBeDefined()
+        })
+
+        test('PouchSB replace when exists',async () => {
+            const db = await createTestDatabase();
+            const doc = { name: 'No ID' };
+
+            await db.post(doc);
+
+            const newDoc = await db.get(doc._id).catch(() => null);
+
+            const rev = newDoc._rev;
+
+            newDoc.name = 'Has ID';
+
+            await db.replace(newDoc);
+
+            const replacedDoc = await db.get(newDoc._id).catch(() => null);
+
+            const replacedRev= replacedDoc._rev;
+
+            expect(rev).not.toEqual(replacedRev);
+
+            let error;
+            try {
+                await db.get(newDoc._id,{rev})
+            } catch(e) {
+                error = e;
+            }
+            expect(error).toBeDefined();
+        })
     })
 
     // Test serialization and deserialization
@@ -212,10 +254,6 @@ describe('ChocolateMango Serialization, Deserialization, and LiveObjects', () =>
 
         beforeAll(async () => {
             db = await createTestDatabase();
-        });
-
-        afterAll(async () => {
-            await db.destroy();
         });
 
         test('should store and retrieve a User instance with _id', async () => {
@@ -319,8 +357,10 @@ describe('ChocolateMango Serialization, Deserialization, and LiveObjects', () =>
 });
 
 describe('ChocolateMango Predicates & Transforms', () => {
+
+    const db = ChocolateMango.dip({}, { transforms, predicates });
     // Helper function to run queries
-    const runQuery = (data, pattern) => ChocolateMango.query(data, pattern);
+    const runQuery = (data, pattern) => db.query(data, pattern);
 
     // Array Predicates
     describe('Array Predicates', () => {
@@ -746,7 +786,7 @@ describe('ChocolateMango Predicates & Transforms', () => {
 
     describe('ChocolateMango Transforms', () => {
         // Helper function to run queries with transforms
-        const runTransform = (data, pattern) => ChocolateMango.query(data, pattern);
+        const runTransform = (data, pattern) => db.query(data, pattern);
 
         describe('Utility Transforms', () => {
             test('$drop removes a property', () => {
@@ -1102,51 +1142,51 @@ describe('ChocolateMango Predicates & Transforms', () => {
     describe('ChocolateMango Extensions and Embeddings', () => {
         beforeEach(() => {
             // Reset any custom predicates/transforms before each test
-            ChocolateMango.predicates = { ...ChocolateMango.predicates };
-            ChocolateMango.transforms = { ...ChocolateMango.transforms };
+            db.predicates = { ...predicates };
+            db.transforms = { ...transforms };
         });
 
         describe('Custom Predicates', () => {
             test('can add custom predicate', () => {
-                ChocolateMango.addPredicate('$isPositive', (a) => a > 0 ? a : undefined);
+                db.addPredicate('$isPositive', (a) => a > 0 ? a : undefined);
 
-                const result = ChocolateMango.query(5, { $isPositive: true });
+                const result = db.query(5, { $isPositive: true });
                 expect(result).toBe(5);
 
-                const negativeResult = ChocolateMango.query(-5, { $isPositive: true });
+                const negativeResult = db.query(-5, { $isPositive: true });
                 expect(negativeResult).toBeUndefined();
             });
 
             test('validates predicate name starts with $', () => {
                 expect(() => {
-                    ChocolateMango.addPredicate('isPositive', (a) => a > 0 ? a : undefined);
+                    db.addPredicate('isPositive', (a) => a > 0 ? a : undefined);
                 }).toThrow('Predicate must have a string name starting with $ and function implementation');
             });
 
             test('validates predicate is a function', () => {
                 expect(() => {
-                    ChocolateMango.addPredicate('$isPositive', 'not a function');
+                    db.addPredicate('$isPositive', 'not a function');
                 }).toThrow('Predicate must have a string name starting with $ and function implementation');
             });
 
             test('custom predicate with multiple arguments', () => {
-                ChocolateMango.addPredicate('$inCustomRange', (a, [min, max]) =>
+                db.addPredicate('$inCustomRange', (a, [min, max]) =>
                     a >= min && a <= max ? a : undefined
                 );
 
-                expect(ChocolateMango.query(5, { $inCustomRange: [0, 10] })).toBe(5);
-                expect(ChocolateMango.query(15, { $inCustomRange: [0, 10] })).toBeUndefined();
+                expect(db.query(5, { $inCustomRange: [0, 10] })).toBe(5);
+                expect(db.query(15, { $inCustomRange: [0, 10] })).toBeUndefined();
             });
 
             test('custom predicate with options', () => {
-                ChocolateMango.addPredicate('$customMatch', (a, options) => {
+                db.addPredicate('$customMatch', (a, options) => {
                     if (options?.ignoreCase && typeof a === 'string' && typeof options.pattern === 'string') {
                         return a.toLowerCase() === options.pattern.toLowerCase() ? a : undefined;
                     }
                     return a === pattern ? a : undefined;
                 });
 
-                expect(ChocolateMango.query('TEST', {
+                expect(db.query('TEST', {
                     $customMatch: {pattern: 'test', ignoreCase: true }
                 })).toBe('TEST');
             });
@@ -1154,29 +1194,29 @@ describe('ChocolateMango Predicates & Transforms', () => {
 
         describe('Custom Transforms', () => {
             test('can add custom transform', () => {
-                ChocolateMango.addTransform('$double', (a) => a * 2);
+                db.addTransform('$double', (a) => a * 2);
 
-                const result = ChocolateMango.query(5, { $double: {} });
+                const result = db.query(5, { $double: {} });
                 expect(result).toBe(10);
             });
 
             test('validates transform name starts with $', () => {
                 expect(() => {
-                    ChocolateMango.addTransform('double', (a) => a * 2);
+                    db.addTransform('double', (a) => a * 2);
                 }).toThrow('Transform must have a string name starting with $ and function implementation');
             });
 
             test('validates transform is a function', () => {
                 expect(() => {
-                    ChocolateMango.addTransform('$double', 'not a function');
+                    db.addTransform('$double', 'not a function');
                 }).toThrow('Transform must have a string name starting with $ and function implementation');
             });
 
             test('custom transform with options', () => {
-                ChocolateMango.addTransform('$multiply', (a, { factor = 2 }) => a * factor);
+                db.addTransform('$multiply', (a, { factor = 2 }) => a * factor);
 
-                expect(ChocolateMango.query(5, { $multiply: { factor: 3 } })).toBe(15);
-                expect(ChocolateMango.query(5, { $multiply: {} })).toBe(10); // uses default factor
+                expect(db.query(5, { $multiply: { factor: 3 } })).toBe(15);
+                expect(db.query(5, { $multiply: {} })).toBe(10); // uses default factor
             });
         });
 
@@ -1220,13 +1260,13 @@ describe('ChocolateMango Predicates & Transforms', () => {
         describe('Integration Tests', () => {
 
             test('custom transform with similarity check', () => {
-                ChocolateMango.addTransform('$getSimilarity', (a, { compareWith }) => {
+                db.addTransform('$getSimilarity', (a, { compareWith }) => {
                     const embedding1 = ChocolateMango.createEmbedding(a);
                     const embedding2 = ChocolateMango.createEmbedding(compareWith);
                     return ChocolateMango.calculateSimilarity(embedding1, embedding2);
                 });
 
-                const result = ChocolateMango.query(
+                const result = db.query(
                     'hello world test',
                     { $getSimilarity: { compareWith: 'hello world other' } }
                 );

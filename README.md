@@ -193,6 +193,8 @@ ChocolateMango supports triggers for `*`, `new`, `changed`, and `deleted` events
     import PouchDB from 'https://cdn.skypack.dev/pouchdb';
     import pouchDBFind from 'https://cdn.skypack.dev/pouchdb-find';
     import ChocolateMango from './index.js';
+    import predicates from "./src/predicates.js";
+    import transforms from "./src/transforms.js";
     import HangulEmbeddingEncoder from "./src/hangul-embedding-encoder.js";
     
     window.ChocolateMango = ChocolateMango;
@@ -201,7 +203,8 @@ ChocolateMango supports triggers for `*`, `new`, `changed`, and `deleted` events
     
     // Initialize PouchDB with ChocolateMango
     const db = new PouchDB('mydb');
-    await ChocolateMango.dip(db,{liveObjects: true,triggers:true,vectors:true});
+    // could destructure predicate and rtansfroms and just use a subset
+    await ChocolateMango.dip(db,{liveObjects: true,triggers:true,vectors:true,predicates,transforms});
     
     db.createTrigger('*', {name : {$exists: true}}, async (event,doc) => {
       console.log(`${event}:`, doc);
@@ -276,6 +279,12 @@ ChocolateMango supports triggers for `*`, `new`, `changed`, and `deleted` events
 ## Release History (Reverse Chronological Order)
 
 Note: the `unicode-name` package has been copied into the `src` directory due to build issues with the package. This will be resolved in a future release.
+
+### Version 0.1.01 (2025-02-15)
+- Fixed issue where arrays were serialized as objects instead of arrays
+- Moved predicates, transforms to separate files to reduce bundle size (modified `dip` to take them as arguments)
+- Added database `replace` function that will ensure old doc versions prior to the most recent that was not deleted can't be retrieved, nuanced capability relate dto behavior of PouchDB replication
+- All units tests pass, but the structural changes will be breaking for many, so bumping secondary version
 
 ### Version 0.0.11 (2025-02-01)
 - Added ability to automatically call and await `init()` function when re-instantiating objects from database. Client code should optionally implement `async init()` and `await instance.ready`.
